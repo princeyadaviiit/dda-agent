@@ -1,12 +1,15 @@
 {
   "name": "claude-tradingview-mcp-trading",
-  "version": "1.0.0",
-  "description": "Automated trading bot — Claude + TradingView strategy + BitGet execution",
-  "main": "bot.js",
+  "version": "2.0.0",
+  "description": "Automated trading bot — ICT Strategy with Binance Futures API + Delta Exchange execution",
+  "main": "dashboard/server.js",
+  "type": "module",
   "scripts": {
-    "start": "node bot.js",
+    "start": "node dashboard/server.js",
+    "bot": "node bot.js",
     "dev": "node bot.js",
-    "dashboard": "node dashboard/server.cjs"
+    "dashboard": "node dashboard/server.js",
+    "monitor": "node monitor.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
