@@ -1,6 +1,6 @@
-# Automated Trading Bot — ICT Strategy
+# Multi-Strategy Crypto Trading Bot
 
-Fully autonomous crypto trading bot that implements ICT (Inner Circle Trading) strategy using Binance Futures API for market data and Delta Exchange India for trade execution.
+Fully autonomous crypto trading bot with **4 advanced trading strategies**, proper risk management, and real-time monitoring. Uses Binance Futures API for market data and Delta Exchange India for trade execution.
 
 ## 🚀 Quick Start
 
@@ -12,35 +12,70 @@ npm install
 cp .env.example .env
 # Edit .env with your Delta Exchange credentials
 
-# Run bot (paper trading mode by default)
-node bot.js
+# Run multi-strategy bot (paper trading mode by default)
+node bot-multi.js
 ```
 
 ## 📊 What This Does
 
 **Five things you get from this setup:**
 
-1. **Fully autonomous trading bot** — fetches data from Binance, analyzes ICT setups, executes trades on Delta Exchange
+1. **Multi-strategy trading bot** — 4 independent strategies running in parallel with OR logic execution
 2. **Complete independence** — runs without Claude/AI assistance, suitable for manual or scheduled execution
-3. **Strict safety checks** — 9-point ICT validation, every condition must pass before trade execution
-4. **24/7 cloud execution** — deploy to Railway and it runs on a schedule, even when your laptop is closed
-5. **Automatic tax accounting** — every trade logged to `trades.csv` with date, price, fees, and net amount
+3. **Proper risk management** — Risk % calculated on margin (not leveraged position), with daily limits and position sizing
+4. **Real-time dashboard** — Web-based monitoring with detailed strategy breakdowns and decision logging
+5. **Automatic tax accounting** — every trade logged to `trades.csv` with strategy information, date, price, fees, and net amount
+
+## 🎯 Trading Strategies
+
+The bot implements **4 distinct trading strategies** that run in parallel. If **ANY** strategy passes all its conditions, the trade executes.
+
+### Strategy 1: CISD (Candle in Supply/Demand)
+- **Concept**: Identifies fresh supply/demand zones and enters when candle BODY closes inside the zone
+- **Timeframes**: 4H (zones) + 15m (entry)
+- **Best For**: Reversal trades at strong support/resistance zones
+
+### Strategy 2: FVG + CISD Combined
+- **Concept**: Finds Fair Value Gap on HTF, waits for price to tap it, then uses CISD on LTF for entry
+- **Timeframes**: 4H (FVG) + 15m (CISD entry)
+- **Best For**: High-confluence setups with multi-timeframe confirmation
+
+### Strategy 3: Fibonacci Retracement
+- **Concept**: Uses Fibonacci levels (0.5, 0.618, 0.786) for reversal entries during trends
+- **Timeframes**: 4H (trend) + 1H or 15m (entry)
+- **Best For**: Clean trend retracements
+
+### Strategy 4: SMT Divergence
+- **Concept**: Compares BTC vs ETH for divergence signals indicating trend reversal
+- **Timeframes**: 4H (divergence) + 1H or 15m (entry)
+- **Best For**: Early reversal signals using inter-market analysis
 
 ## 🎯 Architecture
 
 **Data Flow:**
 ```
-Binance Futures API → Bot Analysis → Delta Exchange → TradingView (optional visualization)
+Binance Futures API → Strategy Manager → Risk Calculator → Delta Exchange
+                           ↓
+                    4 Strategies (Parallel)
+                    ├─ Strategy 1: CISD
+                    ├─ Strategy 2: FVG+CISD
+                    ├─ Strategy 3: Fibonacci
+                    └─ Strategy 4: SMT Divergence
+                           ↓
+                    First Valid Signal → Execute Trade
 ```
 
 **Key Features:**
-- ✅ Fully autonomous operation (no AI/Claude required)
-- ✅ Multi-timeframe ICT analysis (HTF + LTF)
+- ✅ 4 independent trading strategies running in parallel
+- ✅ OR logic execution (trade if ANY strategy passes)
+- ✅ Proper risk management (risk % on margin, not leveraged position)
+- ✅ Multi-timeframe analysis (HTF + LTF)
 - ✅ Real-time data from Binance Futures API
 - ✅ Automated trade execution on Delta Exchange
 - ✅ Paper trading mode for testing
 - ✅ Position monitoring with TP/SL tracking
-- ✅ Tax-ready trade logging
+- ✅ Real-time web dashboard with strategy breakdowns
+- ✅ Tax-ready trade logging with strategy information
 - ✅ Optional TradingView visualization
 
 ## 📦 Installation
@@ -79,11 +114,39 @@ PAPER_TRADING=true              # Start with paper trading
 SYMBOL=BTCUSD                   # Trading pair
 TIMEFRAME_HTF=4H                # Higher timeframe
 TIMEFRAME_LTF=15m               # Lower timeframe
-PORTFOLIO_VALUE_USD=1000        # Account value
-MAX_TRADE_SIZE_USD=100          # Max per trade
-MAX_TRADES_PER_DAY=3            # Daily limit
+
+# Risk Management (CRITICAL)
+PORTFOLIO_VALUE_USD=1000        # Your total capital
+RISK_PER_TRADE_PERCENT=1.0      # Risk per trade (0.5-2% recommended)
+MAX_PORTFOLIO_PER_TRADE_PERCENT=10.0  # Max margin per trade
+MAX_TRADE_SIZE_USD=100          # Absolute max margin
+POSITION_SIZING_METHOD=risk_based     # risk_based, fixed_percent, or fixed_usd
+
+# Leverage and Limits
 LEVERAGE=5                      # Futures leverage
-RISK_REWARD_RATIO=2             # Minimum RR
+MAX_TRADES_PER_DAY=3            # Daily limit (across all strategies)
+MAX_DAILY_LOSS_PERCENT=4.0      # Stop trading if daily loss reaches this
+MAX_OPEN_POSITIONS=2            # Max concurrent positions
+RISK_REWARD_RATIO=2.0           # Minimum RR (1:2)
+
+# Strategy Control
+STRATEGY_1_ENABLED=true         # CISD
+STRATEGY_2_ENABLED=true         # FVG + CISD
+STRATEGY_3_ENABLED=true         # Fibonacci
+STRATEGY_4_ENABLED=true         # SMT Divergence
+
+# Strategy Risk Multipliers (Advanced)
+STRATEGY_1_RISK_MULTIPLIER=1.0
+STRATEGY_2_RISK_MULTIPLIER=1.0
+STRATEGY_3_RISK_MULTIPLIER=1.0
+STRATEGY_4_RISK_MULTIPLIER=1.0
+
+# SMT Divergence Configuration
+SMT_SECONDARY_SYMBOL=ETHUSD     # For Strategy 4
+
+# Trade Direction
+ALLOW_LONG=true                 # Enable long trades
+ALLOW_SHORT=true                # Enable short trades
 ```
 
 **Getting your Delta Exchange India API key:**

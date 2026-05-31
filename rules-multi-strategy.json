@@ -1,0 +1,420 @@
+{
+  "strategy_name": "Multi-Strategy Trading System (ICT + 5 Alternative Strategies)",
+  "version": "2.0",
+  "description": "Comprehensive trading system that executes trades when ANY of the 6 strategies' conditions are met",
+  "execution_logic": "OR - If any strategy's entry conditions are fully met, execute the trade",
+
+  "risk_management": {
+    "applies_to_all_strategies": true,
+    "risk_reward_ratio": {
+      "minimum": "1:2",
+      "target": "1:3",
+      "description": "Never take trades below 1:2 RR. Aim for 1:3 when possible"
+    },
+    "position_sizing": {
+      "max_risk_per_trade": "1-2% of account",
+      "description": "Risk only 1-2% of total capital per trade"
+    },
+    "stop_loss_rules": {
+      "placement": "Strategy-specific (see each strategy's SL rules)",
+      "buffer": "Add 2-5 pips buffer beyond the structure to avoid stop hunts",
+      "never": "Never move stop loss against your position"
+    },
+    "max_trades_per_day": 3,
+    "max_daily_loss": "4% of account - stop trading if hit"
+  },
+
+  "strategies": {
+
+    "strategy_1_ict_fibonacci": {
+      "name": "ICT Inner Circle Trading with Fibonacci OTE",
+      "priority": 1,
+      "description": "Original ICT strategy with Fibonacci retracement and order blocks",
+      "timeframes": {
+        "higher_timeframe": "4H or Daily",
+        "entry_timeframe": "15m or 1H"
+      },
+
+      "indicators": {
+        "ema_8": {
+          "period": 8,
+          "purpose": "Fast trend direction on entry timeframe"
+        },
+        "ema_21": {
+          "period": 21,
+          "purpose": "Medium trend confirmation"
+        },
+        "ema_50": {
+          "period": 50,
+          "purpose": "Major trend filter on HTF"
+        },
+        "fibonacci": {
+          "key_levels": [0.382, 0.5, 0.618, 0.786],
+          "ote_zone": "0.618 to 0.786",
+          "purpose": "Optimal trade entry zone identification"
+        },
+        "order_blocks": {
+          "definition": "Last opposing candle before strong move",
+          "purpose": "High-probability support/resistance zones"
+        },
+        "fair_value_gaps": {
+          "definition": "Price imbalance where wicks don't overlap",
+          "purpose": "Confluence with order blocks for entries"
+        }
+      },
+
+      "entry_conditions": {
+        "long": {
+          "required_all": [
+            "HTF trend is BULLISH (price above EMA 50 on 4H)",
+            "Break of Structure (BOS) to upside confirmed",
+            "Price retraces into OTE zone (0.618-0.786 Fibonacci)",
+            "Bullish Order Block identified in OTE zone",
+            "Fair Value Gap present for confluence",
+            "Currently in Kill Zone (London 07:00-10:00 GMT or NY 13:00-16:00 GMT)",
+            "Confirmation candle: bullish engulfing, hammer, or strong rejection wick",
+            "LTF bias aligns with HTF (price above EMA 8 and 21 on 15m)",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of confirmation candle in OTE zone",
+          "stop_loss": "Below order block low + 5 pip buffer",
+          "take_profit": "Previous swing high or 1:3 RR level"
+        },
+        "short": {
+          "required_all": [
+            "HTF trend is BEARISH (price below EMA 50 on 4H)",
+            "Break of Structure (BOS) to downside confirmed",
+            "Price retraces into OTE zone (0.618-0.786 Fibonacci)",
+            "Bearish Order Block identified in OTE zone",
+            "Fair Value Gap present for confluence",
+            "Currently in Kill Zone (London 07:00-10:00 GMT or NY 13:00-16:00 GMT)",
+            "Confirmation candle: bearish engulfing, shooting star, or strong rejection wick",
+            "LTF bias aligns with HTF (price below EMA 8 and 21 on 15m)",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of confirmation candle in OTE zone",
+          "stop_loss": "Above order block high + 5 pip buffer",
+          "take_profit": "Previous swing low or 1:3 RR level"
+        }
+      },
+
+      "avoid_trade_if": [
+        "HTF trend is NEUTRAL or choppy",
+        "No clear BOS in trend direction",
+        "Price has not reached OTE zone (0.618-0.786)",
+        "No order block or FVG confluence",
+        "Outside kill zone hours",
+        "High-impact news event within 30 minutes",
+        "Risk-reward ratio below 1:2",
+        "Already hit max trades per day (3)"
+      ]
+    },
+
+    "strategy_2_cisd": {
+      "name": "CISD (Candle in Supply/Demand)",
+      "priority": 2,
+      "description": "Identifies supply/demand zones and waits for candle to close inside the zone for entry",
+      "timeframes": {
+        "zone_identification": "4H or Daily",
+        "entry_timeframe": "15m or 1H"
+      },
+
+      "indicators": {
+        "supply_demand_zones": {
+          "definition": "Areas where price previously reversed sharply",
+          "fresh_zone": "Zone that hasn't been tested yet",
+          "purpose": "High-probability reversal areas"
+        },
+        "volume": {
+          "purpose": "Confirm strength of supply/demand zone"
+        }
+      },
+
+      "entry_conditions": {
+        "long": {
+          "required_all": [
+            "Fresh demand zone identified on HTF (4H/Daily)",
+            "Price approaches demand zone from above",
+            "Candle closes INSIDE the demand zone (not just wick)",
+            "Volume spike on approach to zone",
+            "HTF trend is bullish or neutral",
+            "No major resistance directly above",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of candle inside demand zone",
+          "stop_loss": "Below demand zone low + 5 pip buffer",
+          "take_profit": "Next supply zone or 1:3 RR level"
+        },
+        "short": {
+          "required_all": [
+            "Fresh supply zone identified on HTF (4H/Daily)",
+            "Price approaches supply zone from below",
+            "Candle closes INSIDE the supply zone (not just wick)",
+            "Volume spike on approach to zone",
+            "HTF trend is bearish or neutral",
+            "No major support directly below",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of candle inside supply zone",
+          "stop_loss": "Above supply zone high + 5 pip buffer",
+          "take_profit": "Next demand zone or 1:3 RR level"
+        }
+      },
+
+      "avoid_trade_if": [
+        "Zone has been tested multiple times (not fresh)",
+        "No volume confirmation",
+        "Price only wicks into zone without body close",
+        "Major support/resistance blocking path to TP",
+        "Risk-reward ratio below 1:2"
+      ]
+    },
+
+    "strategy_3_fvg_cisd_combined": {
+      "name": "FVG + CISD Combined Strategy",
+      "priority": 3,
+      "description": "Identifies Fair Value Gap on HTF, waits for price to tap it, then uses CISD on LTF for entry confirmation",
+      "timeframes": {
+        "fvg_identification": "4H or Daily",
+        "cisd_confirmation": "15m"
+      },
+
+      "indicators": {
+        "fair_value_gap_htf": {
+          "definition": "Price imbalance on 4H/Daily where wicks don't overlap",
+          "purpose": "Primary target zone for price to return"
+        },
+        "supply_demand_ltf": {
+          "definition": "Supply/demand zones on 15m chart",
+          "purpose": "Secondary confirmation for precise entry"
+        }
+      },
+
+      "entry_conditions": {
+        "long": {
+          "required_all": [
+            "Bullish Fair Value Gap identified on HTF (4H/Daily)",
+            "Price taps into the FVG zone (50% fill minimum)",
+            "Switch to 15m timeframe",
+            "Identify fresh demand zone on 15m within the HTF FVG",
+            "Candle closes inside the 15m demand zone",
+            "HTF trend is bullish",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of candle inside 15m demand zone that's within HTF FVG",
+          "stop_loss": "Below 15m demand zone low + 5 pip buffer",
+          "take_profit": "HTF FVG fill completion or 1:3 RR level"
+        },
+        "short": {
+          "required_all": [
+            "Bearish Fair Value Gap identified on HTF (4H/Daily)",
+            "Price taps into the FVG zone (50% fill minimum)",
+            "Switch to 15m timeframe",
+            "Identify fresh supply zone on 15m within the HTF FVG",
+            "Candle closes inside the 15m supply zone",
+            "HTF trend is bearish",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of candle inside 15m supply zone that's within HTF FVG",
+          "stop_loss": "Above 15m supply zone high + 5 pip buffer",
+          "take_profit": "HTF FVG fill completion or 1:3 RR level"
+        }
+      },
+
+      "avoid_trade_if": [
+        "HTF FVG has already been fully filled (100%)",
+        "No clear supply/demand zone on 15m within the FVG",
+        "HTF trend opposes the FVG direction",
+        "Risk-reward ratio below 1:2"
+      ]
+    },
+
+    "strategy_4_fibonacci_retracement": {
+      "name": "Fibonacci Retracement Strategy",
+      "priority": 4,
+      "description": "Uses Fibonacci levels (0.5, 0.62, 0.79) for reversal entries during trends",
+      "timeframes": {
+        "trend_identification": "4H or Daily",
+        "entry_timeframe": "1H or 15m"
+      },
+
+      "indicators": {
+        "fibonacci": {
+          "key_levels": [0.5, 0.618, 0.786],
+          "purpose": "Identify reversal zones during pullbacks"
+        },
+        "swing_points": {
+          "definition": "Recent significant high and low",
+          "purpose": "Anchor points for Fibonacci drawing"
+        }
+      },
+
+      "entry_conditions": {
+        "long": {
+          "required_all": [
+            "HTF trend is BULLISH (uptrend confirmed)",
+            "Impulse move up identified (swing low to swing high)",
+            "Fibonacci drawn from swing low to swing high",
+            "Price pulls back to 0.5, 0.618, or 0.786 Fibonacci level",
+            "Bullish reversal candle at Fibonacci level (hammer, engulfing, pin bar)",
+            "Stop loss can be placed below recent swing low",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of bullish reversal candle at Fib level",
+          "stop_loss": "Below recent swing low + 5 pip buffer",
+          "take_profit": "Previous swing high or 1:3 RR level"
+        },
+        "short": {
+          "required_all": [
+            "HTF trend is BEARISH (downtrend confirmed)",
+            "Impulse move down identified (swing high to swing low)",
+            "Fibonacci drawn from swing high to swing low",
+            "Price rallies to 0.5, 0.618, or 0.786 Fibonacci level",
+            "Bearish reversal candle at Fibonacci level (shooting star, engulfing, pin bar)",
+            "Stop loss can be placed above recent swing high",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of bearish reversal candle at Fib level",
+          "stop_loss": "Above recent swing high + 5 pip buffer",
+          "take_profit": "Previous swing low or 1:3 RR level"
+        }
+      },
+
+      "avoid_trade_if": [
+        "HTF trend is unclear or ranging",
+        "No clear impulse move to draw Fibonacci from",
+        "Price doesn't reach key Fibonacci levels (0.5, 0.618, 0.786)",
+        "No reversal candle pattern at Fibonacci level",
+        "Risk-reward ratio below 1:2"
+      ]
+    },
+
+    "strategy_5_smt_divergence": {
+      "name": "SMT (Smart Money Tool) Divergence Strategy",
+      "priority": 5,
+      "description": "Compares two correlated assets for divergence signals indicating trend reversal",
+      "timeframes": {
+        "divergence_identification": "4H or Daily",
+        "entry_timeframe": "1H or 15m"
+      },
+
+      "indicators": {
+        "correlated_assets": {
+          "primary": "BTCUSD",
+          "secondary": "ETHUSD",
+          "correlation": "Typically move together",
+          "purpose": "Identify divergence for reversal signals"
+        },
+        "divergence_indicator": {
+          "definition": "When one asset fails to make new high/low while other does",
+          "purpose": "Early reversal signal"
+        }
+      },
+
+      "entry_conditions": {
+        "long": {
+          "required_all": [
+            "Both assets in downtrend",
+            "Primary asset (BTC) makes new lower low",
+            "Secondary asset (ETH) FAILS to make new lower low (bullish divergence)",
+            "Divergence confirmed on HTF (4H/Daily)",
+            "Switch to LTF (1H/15m) for entry confirmation",
+            "Bullish reversal pattern on LTF (engulfing, hammer, BOS to upside)",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of bullish reversal candle after divergence confirmation",
+          "stop_loss": "Below recent swing low on primary asset + 5 pip buffer",
+          "take_profit": "Previous swing high or 1:3 RR level"
+        },
+        "short": {
+          "required_all": [
+            "Both assets in uptrend",
+            "Primary asset (BTC) makes new higher high",
+            "Secondary asset (ETH) FAILS to make new higher high (bearish divergence)",
+            "Divergence confirmed on HTF (4H/Daily)",
+            "Switch to LTF (1H/15m) for entry confirmation",
+            "Bearish reversal pattern on LTF (engulfing, shooting star, BOS to downside)",
+            "Minimum 1:2 risk-reward ratio achievable"
+          ],
+          "entry_trigger": "Close of bearish reversal candle after divergence confirmation",
+          "stop_loss": "Above recent swing high on primary asset + 5 pip buffer",
+          "take_profit": "Previous swing low or 1:3 RR level"
+        }
+      },
+
+      "avoid_trade_if": [
+        "No clear divergence between correlated assets",
+        "Divergence on LTF only (must be HTF divergence)",
+        "No reversal confirmation on LTF",
+        "Assets are not correlated (check correlation coefficient)",
+        "Risk-reward ratio below 1:2"
+      ]
+    },
+
+    "strategy_6_placeholder": {
+      "name": "Strategy 6 - To Be Defined",
+      "priority": 6,
+      "description": "Fifth strategy from transcript was not clearly defined. Update this section when full transcript is available.",
+      "status": "INCOMPLETE - Awaiting full transcript",
+      "note": "The transcript provided was cut off. Please provide the complete transcript to extract the fifth strategy."
+    }
+  },
+
+  "execution_logic_detailed": {
+    "description": "The bot will check ALL strategies in parallel. If ANY strategy's entry conditions are fully met, execute the trade.",
+    "priority_system": "If multiple strategies signal at the same time, use the one with highest priority (lowest number)",
+    "conflict_resolution": "If one strategy signals LONG and another signals SHORT simultaneously, DO NOT TRADE (wait for clarity)",
+    "validation_order": [
+      "1. Check global risk management (max trades per day, max daily loss)",
+      "2. Check each strategy's entry conditions in parallel",
+      "3. If any strategy passes all conditions, prepare trade",
+      "4. Validate risk-reward ratio is minimum 1:2",
+      "5. Execute trade with strategy-specific stop loss and take profit",
+      "6. Log which strategy triggered the trade"
+    ]
+  },
+
+  "global_filters": {
+    "applies_to_all_strategies": true,
+    "filters": [
+      "Maximum 3 trades per day across all strategies",
+      "Stop trading if daily loss reaches 4% of account",
+      "Avoid trading 30 minutes before/after high-impact news (NFP, FOMC, CPI)",
+      "Minimum 1:2 risk-reward ratio required for all trades",
+      "No trading during major holidays or low liquidity periods",
+      "If 2 consecutive losses, reduce position size by 50% for next trade",
+      "Never have more than 2 open positions simultaneously"
+    ]
+  },
+
+  "trade_management": {
+    "applies_to_all_strategies": true,
+    "partial_profits": {
+      "first_target": "Take 50% profit at 1:2 RR",
+      "second_target": "Let remaining 50% run to 1:3 or higher"
+    },
+    "breakeven_rule": "Move stop to entry +/- spread once trade is 1:1.5 in profit",
+    "trailing_stop": "Optional - trail stop by 1 ATR once in 1:2 profit",
+    "max_hold_time": "Close trade if no movement toward TP within 24 hours (discretionary)"
+  },
+
+  "logging_requirements": {
+    "for_each_trade_log": [
+      "Which strategy triggered the trade (strategy_1 through strategy_6)",
+      "All entry conditions that were met",
+      "Entry price, stop loss, take profit levels",
+      "Risk-reward ratio at entry",
+      "Timeframe used for entry",
+      "Any confluence factors present",
+      "Outcome: TP hit, SL hit, or manual close"
+    ]
+  },
+
+  "notes": {
+    "important": "This is a multi-strategy system. The bot will be MORE active than a single-strategy system because it has 6 different ways to enter trades.",
+    "risk_warning": "With more entry opportunities comes more risk. Strictly enforce max trades per day and max daily loss limits.",
+    "backtesting": "Backtest each strategy individually first, then test the combined system.",
+    "optimization": "After 30 days of live trading, review which strategies have highest win rate and adjust priorities accordingly.",
+    "incomplete_data": "Strategy 6 is incomplete due to truncated transcript. Update when full information is available."
+  }
+}

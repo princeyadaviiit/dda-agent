@@ -1,3 +1,6 @@
 Date,Time (UTC),Exchange,Symbol,Side,Quantity,Price,Total USD,Fee (est.),Net Amount,Order ID,Mode,Notes
 ,,,,,,,,,,,"NOTE","Hey, if you're at this stage of the video, you must be enjoying it... perhaps you could hit subscribe now? :)"
-2026-05-31,07:11:08,Delta Exchange India,RIVERUSD,BUY,1.442377,6.93,10.00,0.0100,9.99,,PAPER,"All conditions met"
+2026-05-31,10:30:06,Delta Exchange India,RIVERUSD,,,6.88,,,,BLOCKED,BLOCKED,N/A,"Failed conditions"
+2026-05-31,10:36:34,Delta Exchange India,RIVERUSD,,,6.87,,,,BLOCKED,BLOCKED,N/A,"Failed conditions"
+2026-05-31,10:44:57,Delta Exchange India,RIVERUSD,,,6.86,,,,BLOCKED,BLOCKED,N/A,"Failed conditions"
+2026-05-31,10:48:54,Delta Exchange India,RIVERUSD,,,6.85,,,,BLOCKED,BLOCKED,N/A,"Failed conditions"

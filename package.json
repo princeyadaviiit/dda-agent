@@ -1,15 +1,17 @@
 {
   "name": "claude-tradingview-mcp-trading",
   "version": "2.0.0",
-  "description": "Automated trading bot — ICT Strategy with Binance Futures API + Delta Exchange execution",
+  "description": "Multi-Strategy Automated Trading Bot — 4 strategies with Binance Futures API + Delta Exchange execution",
   "main": "dashboard/server.js",
   "type": "module",
   "scripts": {
     "start": "node dashboard/server.js",
     "bot": "node bot.js",
+    "bot:multi": "node bot-multi.js",
     "dev": "node bot.js",
     "dashboard": "node dashboard/server.js",
-    "monitor": "node monitor.js"
+    "monitor": "node monitor.js",
+    "tax": "node bot-multi.js --tax-summary"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

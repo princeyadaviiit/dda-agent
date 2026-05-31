@@ -6,7 +6,7 @@ const INTERVAL_MS = INTERVAL_MINUTES * 60 * 1000;
 function runBot() {
   console.log(`\n[${new Date().toISOString()}] Running node bot.js...`);
   
-  exec('node bot.js', (error, stdout, stderr) => {
+  exec('node bot-multi.js', (error, stdout, stderr) => {
     if (stdout) console.log(stdout);
     if (stderr) console.error(`[Error Output]:\n${stderr}`);
     

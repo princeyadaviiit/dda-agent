@@ -779,6 +779,21 @@ function renderDetail() {
 
   const indicators = t.indicators || {};
   const conditions = (t.conditions || []).map(c => {
+    // Check if this is a strategy header (starts with ━━━)
+    if (c.label && c.label.startsWith('━━━')) {
+      const statusIcon = c.pass ? '✅' : '🚫';
+      const statusColor = c.pass ? 'tag-pass' : 'tag-block';
+      return `<div style="margin-top: 16px; margin-bottom: 8px; padding: 8px; background: rgba(0,255,102,0.05); border-left: 3px solid ${c.pass ? 'var(--green)' : 'var(--red)'};">
+        <div style="font-size: 13px; font-weight: 600; color: ${c.pass ? 'var(--green)' : 'var(--red)'}; margin-bottom: 4px;">
+          ${statusIcon} ${c.label.replace(/━━━/g, '').trim()}
+        </div>
+        <div style="font-size: 11px; color: var(--green-dim);">
+          ${c.required} — <span class="${statusColor}">${c.actual}</span>
+        </div>
+      </div>`;
+    }
+
+    // Regular condition
     const cls = c.pass ? 'pass' : 'fail';
     const marker = c.pass ? '✓' : '✗';
     const v = c.actual !== undefined ? ` <span class="val">${typeof c.actual === 'number' ? fmtNum(c.actual, 2) : c.actual}</span>` : '';
