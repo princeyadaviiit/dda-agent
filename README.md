@@ -163,7 +163,7 @@ Follow the complete step-by-step guide: [docs/exchanges/delta-india.md](docs/exc
 ### Run Bot Once
 
 ```bash
-node bot.js
+node bot-multi.js
 ```
 
 **What happens:**
