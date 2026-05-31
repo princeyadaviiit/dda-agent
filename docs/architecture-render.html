@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DDA Agent Architecture</title>
+    <style>
+        body {
+            background-color: #1e1e1e; /* Dark background from your reference */
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .mermaid-container {
+            background-color: #1e1e1e;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+    </style>
+    <!-- Include Mermaid -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#1e1e1e',     // Dark node background
+                primaryTextColor: '#fff',    // White text
+                primaryBorderColor: '#888',  // Light gray thin borders
+                lineColor: '#aaa',           // Light gray lines
+                secondaryColor: '#2a2a2a',
+                tertiaryColor: '#2a2a2a',
+                fontFamily: 'arial'
+            },
+            flowchart: {
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+</head>
+<body>
+
+    <div class="mermaid-container">
+        <div class="mermaid">
+            graph TD
+                %% Core Top-Level Components
+                TV["TradingView Chrome Chart"]
+                MCP["tradingview-mcp Server"]
+                Claude["Claude Code / AI Client"]
+
+                %% DDA Agent Core
+                Bot["DDA-agent: bot.js"]
+
+                %% Bot Modules & External Systems
+                Visual["visual-analysis.js"]
+                PosManager["position-manager.js"]
+                Delta["Delta Exchange India API"]
+                Logs["trades.csv & safety-check-log.json"]
+
+                %% Relationships - Main Data Flow
+                TV <-->|"CDP Port 9222"| MCP
+                MCP <-->|"Stdio MCP Protocol"| Claude
+                
+                %% Claude Interactions
+                Claude -->|"Fetch OHLCV Data & Chart State"| MCP
+                Claude -->|"15m Loop / Pass Market Data"| Bot
+                
+                %% Bot execution paths
+                Bot -->|"Identify ICT Levels & TP/SL"| Visual
+                Bot -->|"Track P&L & Open Trades"| PosManager
+                Bot -->|"HMAC-SHA256 Orders"| Delta
+                Bot -->|"Log Decisions"| Logs
+                
+                %% Feedback loops
+                Visual -.->|"Send Drawing Instructions"| Claude
+        </div>
+    </div>
+
+</body>
+</html>

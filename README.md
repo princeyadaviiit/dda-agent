@@ -1,169 +1,139 @@
-# Claude Execute — Automated Crypto Trading
+# Automated Trading Bot — ICT Strategy
 
-A lightweight automation layer that reads your TradingView chart, evaluates your strategy, and places trades on your exchange — with strict safety checks and full tax-ready logging.
+Fully autonomous crypto trading bot that implements ICT (Inner Circle Trading) strategy using Binance Futures API for market data and Delta Exchange India for trade execution.
 
----
+## 🚀 Quick Start
 
-## What This Does
+```bash
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your Delta Exchange credentials
+
+# Run bot (paper trading mode by default)
+node bot.js
+```
+
+## 📊 What This Does
 
 **Five things you get from this setup:**
 
-1. **Claude connected to your exchange** — reads your TradingView chart and executes trades on your exchange automatically
-2. **A safety check** — every condition in your strategy must pass before a single trade goes through
-3. **24/7 cloud execution** — deploy to Railway and it runs on a schedule, even when your laptop is closed
-4. **Automatic tax accounting** — every trade logged to `trades.csv` with date, price, fees, and net amount, ready for your accountant
-5. **Fully yours** — no email, no course, no upsell. Everything is in this repo.
+1. **Fully autonomous trading bot** — fetches data from Binance, analyzes ICT setups, executes trades on Delta Exchange
+2. **Complete independence** — runs without Claude/AI assistance, suitable for manual or scheduled execution
+3. **Strict safety checks** — 9-point ICT validation, every condition must pass before trade execution
+4. **24/7 cloud execution** — deploy to Railway and it runs on a schedule, even when your laptop is closed
+5. **Automatic tax accounting** — every trade logged to `trades.csv` with date, price, fees, and net amount
 
----
+## 🎯 Architecture
 
-## The One-Shot Prompt
+**Data Flow:**
+```
+Binance Futures API → Bot Analysis → Delta Exchange → TradingView (optional visualization)
+```
 
-> **This is the thing you paste.** Open Claude Code in this directory, paste the entire contents of [`prompts/02-one-shot-trade.md`](prompts/02-one-shot-trade.md), and Claude will do the rest.
+**Key Features:**
+- ✅ Fully autonomous operation (no AI/Claude required)
+- ✅ Multi-timeframe ICT analysis (HTF + LTF)
+- ✅ Real-time data from Binance Futures API
+- ✅ Automated trade execution on Delta Exchange
+- ✅ Paper trading mode for testing
+- ✅ Position monitoring with TP/SL tracking
+- ✅ Tax-ready trade logging
+- ✅ Optional TradingView visualization
 
-Here's what it does when you run it:
-
-| Step | What Claude does |
-|------|-----------------|
-| 1 | Reads your `rules.json` strategy |
-| 2 | Pulls live price + indicator data from TradingView |
-| 3 | Calculates MACD from raw candle data |
-| 4 | Evaluates market bias (bullish / bearish / neutral) |
-| 4b | Checks trade limits — daily cap and max trade size |
-| 5 | Runs the safety check — every entry condition checked |
-| 6 | Executes the trade via your exchange if all conditions pass |
-| 7 | Logs the trade to `trades.csv` — date, price, fees, net amount (tax-ready) |
-| 8 | Saves full decision log to `safety-check-log.json` |
-
-If anything fails the safety check, it stops and tells you exactly which condition failed and the actual values. No trade goes through unless everything lines up.
-
----
-
-## Getting Started
-
-### Step 1 — Paste the one-shot prompt into Claude Code
-
-Copy the entire contents of [`prompts/02-one-shot-trade.md`](prompts/02-one-shot-trade.md) and paste it into your Claude Code terminal.
-
-That's it. Claude acts as your onboarding agent — it clones the repo, walks you through connecting your exchange, sets your trading preferences, connects TradingView, optionally builds a strategy from a YouTube channel, deploys to Railway, and runs the bot for the first time. Every step is interactive. It pauses when it needs something from you and handles everything else automatically.
-
----
-
-## What's Happening Under the Hood
-
-For anyone who wants to understand the steps manually, or troubleshoot a specific part:
+## 📦 Installation
 
 ### Prerequisites
 
-- **TradingView MCP** must already be set up — [setup walkthrough video](https://youtu.be/CrgISHUiYUw)
-- **Claude Code** installed and running
-- **An exchange account** with API access (Binance, BitGet, Bybit, OKX, Coinbase Advanced, Kraken, KuCoin, Gate.io, MEXC, or Bitfinex)
-- **Node.js 18+** — check with `node --version`
+- Node.js >= 18.0.0
+- Delta Exchange India account
+- Internet connection (for Binance API)
 
----
+### Setup
 
-### Clone the repo
-
-**Mac / Linux:**
 ```bash
+# Clone repository
 git clone https://github.com/vaughanf1/claude-execute
 cd claude-execute
-```
 
-**Windows:**
-```powershell
-git clone https://github.com/vaughanf1/claude-execute
-cd claude-execute
-```
+# Install dependencies
+npm install
 
----
-
-### Add your exchange API credentials
-
-**Mac / Linux:**
-```bash
+# Configure environment
 cp .env.example .env
 ```
 
-**Windows:**
-```powershell
-Copy-Item .env.example .env
-```
+### Environment Configuration
 
-Open `.env` and fill in:
+Edit `.env` with your credentials:
 
-```
-BITGET_API_KEY=your_api_key_here
-BITGET_SECRET_KEY=your_secret_key_here
-BITGET_PASSPHRASE=your_passphrase_here
-PORTFOLIO_VALUE_USD=1000
-MAX_TRADE_SIZE_USD=100
-MAX_TRADES_PER_DAY=3
-```
-
-> The `BITGET_*` variable names are kept for compatibility with the bot code — fill them in with credentials from whichever exchange you use. If your exchange doesn't use a passphrase (e.g. Binance), leave that field blank.
-
-**Getting your API key:**
-
-Step-by-step guides for all supported exchanges:
-
-| Exchange | Guide |
-|----------|-------|
-| BitGet | [docs/exchanges/bitget.md](docs/exchanges/bitget.md) |
-| Binance | [docs/exchanges/binance.md](docs/exchanges/binance.md) |
-| Bybit | [docs/exchanges/bybit.md](docs/exchanges/bybit.md) |
-| OKX | [docs/exchanges/okx.md](docs/exchanges/okx.md) |
-| Coinbase Advanced | [docs/exchanges/coinbase.md](docs/exchanges/coinbase.md) |
-| Kraken | [docs/exchanges/kraken.md](docs/exchanges/kraken.md) |
-| KuCoin | [docs/exchanges/kucoin.md](docs/exchanges/kucoin.md) |
-| Gate.io | [docs/exchanges/gateio.md](docs/exchanges/gateio.md) |
-| MEXC | [docs/exchanges/mexc.md](docs/exchanges/mexc.md) |
-| Bitfinex | [docs/exchanges/bitfinex.md](docs/exchanges/bitfinex.md) |
-
-Two rules that apply to every exchange — **withdrawals OFF, IP whitelist ON**.
-
----
-
-### Launch TradingView and connect the MCP
-
-**Mac:**
 ```bash
-tv_launch
-tv_health_check
+# Delta Exchange (required for live trading)
+DELTA_API_KEY=your_api_key_here
+DELTA_API_SECRET=your_api_secret_here
+
+# Trading Configuration
+PAPER_TRADING=true              # Start with paper trading
+SYMBOL=BTCUSD                   # Trading pair
+TIMEFRAME_HTF=4H                # Higher timeframe
+TIMEFRAME_LTF=15m               # Lower timeframe
+PORTFOLIO_VALUE_USD=1000        # Account value
+MAX_TRADE_SIZE_USD=100          # Max per trade
+MAX_TRADES_PER_DAY=3            # Daily limit
+LEVERAGE=5                      # Futures leverage
+RISK_REWARD_RATIO=2             # Minimum RR
 ```
 
-**Windows:** See [docs/setup-windows.md](docs/setup-windows.md)
+**Getting your Delta Exchange India API key:**
 
-**Linux:** See [docs/setup-linux.md](docs/setup-linux.md)
+Follow the complete step-by-step guide: [docs/exchanges/delta-india.md](docs/exchanges/delta-india.md)
 
-Verify with `tv_health_check` — should return `cdp_connected: true`.
+**Security rules:**
+- ✅ Enable **Read** and **Trade** permissions
+- ❌ **NEVER enable Withdraw** permission
+- ✅ Use IP whitelist when possible
 
----
+## 🎮 Usage
 
-### Run the bot manually
+### Run Bot Once
 
 ```bash
 node bot.js
 ```
 
----
+**What happens:**
+1. Connects to Binance Futures API
+2. Fetches HTF (4H) and LTF (15m) candles
+3. Performs ICT analysis
+4. Validates all safety conditions
+5. Executes trade if conditions pass
+6. Logs decision to files
 
-## Terminal Dashboard
+### Monitor Positions
 
-A Matrix-style live dashboard for viewing every decision the bot has made — executed trades, blocked trades, and the exact conditions that passed or failed.
+```bash
+npm run monitor
+```
+
+**What it does:**
+- Checks open positions every 30 seconds
+- Monitors for TP/SL hits
+- Sends notifications
+- Updates P&L
+
+### View Dashboard
 
 ```bash
 npm run dashboard
 ```
 
-Then open [http://localhost:3737](http://localhost:3737).
-
-What you get:
-- **Stats strip** — total decisions, trades taken, blocked, today's count vs daily cap, total volume, estimated fees
-- **Executed Trades** — every order that went through (paper or live), with timestamp, price, size, mode, order ID
-- **Decision Feed** — every safety-check run, color-coded PASS / BLOCK, filterable
-- **Decision Detail** — click any row to inspect every condition (✓ pass / ✗ fail), the indicator values at decision time, and the trade size/limits
-
-Zero dependencies, reads `safety-check-log.json` and `trades.csv` directly. Auto-refreshes every 5 seconds.
+Open http://localhost:3737 to view:
+- Recent trade decisions
+- Position status
+- ICT analysis results
+- Safety check details
 
 **Want to see the dashboard populated before running the bot?** Seed it with demo data:
 
@@ -172,90 +142,204 @@ node dashboard/seed-demo.cjs        # 12 sample decisions (3 PASS, 9 BLOCK)
 node dashboard/seed-demo.cjs reset  # remove demo data
 ```
 
----
-
-## Deploy to Railway (Run in the Cloud 24/7)
-
-The local setup runs when your laptop is open. Railway lets the bot check for setups around the clock — even while you sleep.
-
-> **Note:** Cloud mode pulls candle data directly from Binance's free market API instead of TradingView. No TradingView Desktop needed in the cloud. The strategy logic and safety check are identical.
-
-### 1. Deploy
+### Generate Tax Report
 
 ```bash
+node bot.js --tax-summary
+```
+
+## 🎯 ICT Strategy
+
+The bot implements a complete ICT (Inner Circle Trading) strategy:
+
+**Multi-Timeframe Analysis:**
+- **HTF (4H):** Trend direction (BULLISH/BEARISH/NEUTRAL)
+- **LTF (15m):** Precise entry timing
+
+**ICT Concepts:**
+- Order Blocks (OB) — Last opposing candle before strong move
+- Fair Value Gaps (FVG) — Price imbalances where wicks don't overlap
+- Fibonacci OTE Zone — 0.618-0.786 retracement (optimal trade entry)
+- Kill Zones — London (07:00-10:00 GMT) and NY (13:00-16:00 GMT) sessions
+- Break of Structure (BOS) — Continuation signal in trend direction
+- Confirmation Patterns — Engulfing, hammer, shooting star, rejection wicks
+
+**Safety Checks:**
+- 9-point ICT validation
+- Daily trade limits
+- Position sizing (max 1% risk)
+- Risk:Reward ratio enforcement
+
+## 📊 Data Sources
+
+### Binance Futures API (Primary)
+
+**Used for:**
+- Historical OHLCV candles
+- Real-time price quotes
+- Volume data
+- All technical analysis
+
+**Endpoints:**
+- `/fapi/v1/klines` - Candle data
+- `/fapi/v1/ticker/price` - Current price
+- `/fapi/v1/ping` - Connection test
+
+**Rate Limits:**
+- 1200 requests/minute
+- Bot uses ~2 requests per run
+- Safe for 1-minute intervals
+
+**Authentication:**
+- None required for market data
+
+### Delta Exchange India (Trade Execution)
+
+**Used for:**
+- Order placement
+- Position management
+- Account balance
+
+**Authentication:**
+- API Key + Secret (HMAC-SHA256)
+
+**Permissions Required:**
+- ✅ Read
+- ✅ Trade
+- ❌ Withdraw (never enable)
+
+### TradingView (Optional Visualization)
+
+**Used for:**
+- Post-trade drawing only
+- Entry/TP/SL visualization
+- Order block markers
+- FVG markers
+
+**NOT used for:**
+- Market data ❌
+- Price feeds ❌
+- Technical analysis ❌
+- Trade decisions ❌
+
+**How to use:**
+- Bot runs independently
+- Claude Code can draw on chart after trade
+- Completely optional feature
+
+## 🚀 Deployment
+
+### Local Execution
+
+```bash
+# Run once
+node bot.js
+
+# Run on schedule (cron)
+# Every 4 hours
+0 */4 * * * cd /path/to/bot && node bot.js
+
+# Every 15 minutes
+*/15 * * * * cd /path/to/bot && node bot.js
+```
+
+### Cloud Deployment (Railway)
+
+The bot runs in the cloud on a schedule using Binance API (no TradingView needed).
+
+```bash
+# Install Railway CLI
 npm install -g @railway/cli
+
+# Login and initialize
 railway login
 railway init
+
+# Deploy
 railway up
 ```
 
-### 2. Set your environment variables in Railway
+**Configure in Railway dashboard:**
 
-Go to your Railway project → Variables and add everything from `.env.example`:
+1. Set all environment variables from `.env`
+2. Add cron schedule:
+   - 4H chart: `0 */4 * * *` (every 4 hours)
+   - 1D chart: `0 9 * * *` (daily at 9am UTC)
+   - 1H chart: `0 * * * *` (every hour)
 
-| Variable | Example |
-|----------|---------|
-| `BITGET_API_KEY` | your key |
-| `BITGET_SECRET_KEY` | your secret |
-| `BITGET_PASSPHRASE` | your passphrase (blank if not applicable) |
-| `PORTFOLIO_VALUE_USD` | 1000 |
-| `MAX_TRADE_SIZE_USD` | 100 |
-| `MAX_TRADES_PER_DAY` | 3 |
-| `PAPER_TRADING` | true (set to false when ready) |
-| `SYMBOL` | BTCUSDT |
-| `TIMEFRAME` | 4H |
+3. Start with `PAPER_TRADING=true`
 
-### 3. Set a cron schedule
+## 🔒 Safety Features
 
-In Railway → Settings → Cron Schedule, set how often the bot runs. Recommended:
+### Paper Trading Mode
 
-| Timeframe | Schedule | What it means |
-|-----------|----------|----------------|
-| 4H chart | `0 */4 * * *` | Every 4 hours |
-| 1D chart | `0 9 * * *` | Once a day at 9am UTC |
-| 1H chart | `0 * * * *` | Every hour |
+**Always start with paper trading:**
 
-### 4. Start in paper trading mode
+```bash
+PAPER_TRADING=true
+```
 
-`PAPER_TRADING=true` logs every decision but never places real orders. Watch a few days of paper trades, confirm the logic matches what you expect, then flip it to `false`.
+**What it does:**
+- Simulates all trades
+- Logs to trades.csv with "PAPER" mode
+- Tracks positions in memory
+- No real money at risk
 
----
+**Switch to live:**
 
-## Build Your Own Strategy (Optional)
+```bash
+PAPER_TRADING=false
+```
 
-The example `rules.json` uses a VWAP + RSI(3) + EMA(8) scalping strategy. To build one from any trader's public videos:
+### Risk Management
 
-1. Go to [Apify](https://apify.com) and search the actor store for **YouTube Transcript Scraper** — takes about 30 seconds per channel
-2. Paste the output into `prompts/01-extract-strategy.md`
-3. Run that prompt in Claude Code — it generates a `rules.json` tailored to that trader's methodology
+**Automatic enforcement:**
+- Max 1% risk per trade
+- Daily trade limit
+- Position size limits
+- Minimum risk:reward ratio
 
----
+**Safety checks:**
+- 9-point ICT validation
+- Trend confirmation
+- Kill zone timing
+- Confluence requirements
 
-## Files
+### Trade Logging
 
-| File | What it does |
-|------|-------------|
-| `rules.json` | Your strategy — indicators, entry rules, risk rules |
-| `.env` | Your exchange credentials (gitignored — never commits) |
-| `prompts/01-extract-strategy.md` | Build rules.json from trader transcripts |
-| `prompts/02-one-shot-trade.md` | **The one-shot prompt — paste this to trade** |
-| `safety-check-log.json` | Auto-generated log of every trade decision |
-| `trades.csv` | Tax-ready trade record — auto-written on every execution |
-| `docs/setup-windows.md` | Windows-specific MCP setup |
-| `docs/setup-linux.md` | Linux-specific MCP setup |
+**Every decision logged:**
+- All ICT conditions (pass/fail)
+- Exact failure reasons
+- Trade parameters
+- Timestamp and price
 
----
+**Files:**
+- `safety-check-log.json` - Detailed analysis
+- `trades.csv` - Tax-ready format
 
-## Tax Accounting
+## 📁 Data Files
 
-Every trade the bot places is automatically written to `trades.csv` with the columns your accountant needs:
+### Auto-Generated
+
+- `trades.csv` - Tax-ready trade log
+- `safety-check-log.json` - All trade decisions with conditions
+- `open-positions.json` - Active positions with TP/SL
+
+### Configuration
+
+- `.env` - Credentials and settings (gitignored)
+- `rules.json` - ICT strategy rules
+
+## 📈 Tax Accounting
+
+Every trade is automatically written to `trades.csv` with the columns your accountant needs:
 
 | Column | Description |
 |--------|-------------|
 | Date | ISO date of the trade |
 | Time | UTC time |
 | Exchange | Exchange name |
-| Symbol | e.g. BTCUSDT |
+| Symbol | e.g. BTCUSD |
 | Side | Buy / Sell |
 | Quantity | Units traded |
 | Price | Price per unit at execution |
@@ -265,37 +349,215 @@ Every trade the bot places is automatically written to `trades.csv` with the col
 | Order ID | Exchange reference |
 | Mode | Paper / Live |
 
-At tax time: open the file, hand it to your accountant, or import it directly into your accounting software. Nothing to reconstruct.
+At tax time: open the file, hand it to your accountant, or import it directly into your accounting software.
 
-For a quick summary of your trading activity, run:
+For a quick summary:
 
 ```bash
 node bot.js --tax-summary
 ```
 
-This prints total trades, volume, and fees paid.
+## 🛠️ Configuration
+
+### Trading Pairs
+
+The bot uses Delta format (`BTCUSD`) which is automatically converted to Binance format (`BTCUSDT`).
+
+Supported pairs:
+- BTCUSD → BTCUSDT
+- ETHUSD → ETHUSDT
+- Any USD pair → USDT equivalent
+
+### Timeframes
+
+Supported timeframes:
+- Minutes: `1m`, `3m`, `5m`, `15m`, `30m`
+- Hours: `1H`, `2H`, `4H`, `6H`, `8H`, `12H`
+- Days: `1D`, `3D`
+- Weeks: `1W`
+- Months: `1M`
+
+### Strategy Rules
+
+Edit `rules.json` to customize:
+- Entry conditions
+- Exit conditions
+- Risk parameters
+- ICT concept weights
+
+## 🐛 Troubleshooting
+
+### Bot won't start
+
+```bash
+# Check Node version
+node --version  # Should be >= 18.0.0
+
+# Reinstall dependencies
+rm -rf node_modules package-lock.json
+npm install
+
+# Check .env file
+cat .env  # Verify all variables are set
+```
+
+### Binance connection fails
+
+```bash
+# Test connectivity
+curl https://fapi.binance.com/fapi/v1/ping
+
+# Check symbol format
+# Bot uses: BTCUSD
+# Binance uses: BTCUSDT
+# Conversion is automatic
+```
+
+### No trades executing
+
+```bash
+# Check safety log
+cat safety-check-log.json
+
+# Review failed conditions
+# Most common: not in kill zone, no OTE, missing confluence
+
+# Adjust rules if needed
+nano rules.json
+```
+
+### Delta Exchange errors
+
+```bash
+# Verify API credentials
+# Check permissions: Read + Trade only
+# Never enable Withdraw
+
+# Test in paper mode first
+PAPER_TRADING=true node bot.js
+```
+
+## 📚 Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) - System design and data flow
+- [CLAUDE.md](CLAUDE.md) - Development guide for Claude Code
+- [Delta Exchange Setup](docs/exchanges/delta-india.md) - Exchange configuration
+
+## 🛠️ Development
+
+### Project Structure
+
+```
+.
+├── bot.js                  # Main strategy engine
+├── binance-client.js       # Binance API client
+├── position-manager.js     # Position tracking
+├── monitor.js              # Position monitoring
+├── visual-analysis.js      # Drawing preparation
+├── rules.json              # Strategy rules
+├── .env                    # Configuration (gitignored)
+├── trades.csv              # Trade log
+├── safety-check-log.json   # Decision log
+├── open-positions.json     # Active positions
+└── docs/
+    ├── ARCHITECTURE.md     # System architecture
+    └── exchanges/          # Exchange guides
+```
+
+### Adding Indicators
+
+```javascript
+// 1. Add calculation function
+function calcNewIndicator(candles, period) {
+  // Your calculation
+  return value;
+}
+
+// 2. Call in performICTAnalysis()
+const newIndicator = calcNewIndicator(candlesHTF, 20);
+
+// 3. Add to return object
+return {
+  ...ictAnalysis,
+  newIndicator,
+};
+
+// 4. Use in runICTSafetyCheck()
+check("New Indicator", "expected", actual, pass);
+```
+
+### Testing
+
+```javascript
+import { calcEMA, performICTAnalysis } from './bot.js';
+
+// Mock data
+const candles = [
+  { time: 1234567890, open: 50000, high: 51000, low: 49000, close: 50500, volume: 100 },
+  // ...
+];
+
+// Test indicator
+const ema = calcEMA(candles.map(c => c.close), 8);
+console.log('EMA:', ema);
+
+// Test analysis
+const analysis = performICTAnalysis(candles, candles);
+console.log('Trend:', analysis.htfTrend);
+```
+
+## ⚠️ Important Notes
+
+- **Start with paper trading** - Test thoroughly before live trading
+- **Never commit .env** - Contains API credentials
+- **Monitor positions** - Run monitor when trades are open
+- **Check logs** - Review safety-check-log.json for blocked trades
+- **Delta API** - Never enable Withdraw permission
+- **Binance API** - No auth required for market data
+- **Bot is autonomous** - Runs without Claude/AI assistance
+- **TradingView optional** - Only for visualization, not required
+
+## 📄 License
+
+MIT License - See LICENSE file for details
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Test thoroughly in paper mode
+4. Submit a pull request
+
+## ⚡ Quick Reference
+
+```bash
+# Run bot
+node bot.js
+
+# Monitor positions
+npm run monitor
+
+# View dashboard
+npm run dashboard
+
+# Tax report
+node bot.js --tax-summary
+
+# Test Binance connection
+node -e "import('./binance-client.js').then(m => m.testConnection().then(r => console.log('Connected:', r)))"
+```
+
+## 🎯 Next Steps
+
+1. Configure `.env` with your credentials
+2. Run in paper mode: `node bot.js`
+3. Review `safety-check-log.json` to understand decisions
+4. Monitor positions: `npm run monitor`
+5. When confident, switch to live: `PAPER_TRADING=false`
 
 ---
 
-## Safety
+**Need help?** Check the [Architecture docs](docs/ARCHITECTURE.md) or review the [CLAUDE.md](CLAUDE.md) guide.
 
-The safety check conditions are not fixed — they come directly from your `rules.json`. If you build a strategy from a YouTube trader's transcripts using the Apify prompt, your safety check will reflect that trader's entry logic. If you use the example strategy, it reflects those conditions. They're yours, not a generic filter.
-
-Every condition in your `entry_rules` must pass before a trade goes through. One fails — nothing happens. The bot tells you exactly which condition failed and the actual value it saw.
-
-Additional guardrails that apply regardless of strategy:
-- Maximum trade size capped at `MAX_TRADE_SIZE_USD` in `.env`
-- Maximum trades per day capped at `MAX_TRADES_PER_DAY` in `.env`
-- Position sizing calculated from your portfolio value — max 1% risk per trade
-- Every decision logged to `safety-check-log.json` with exact indicator values
-- Every executed trade recorded in `trades.csv` for accounting
-
-**This is not financial advice.** Build your strategy properly. Run the backtest. Paper trade before going live. Never put in more than you can afford to lose.
-
----
-
-## Resources
-
-- [Apify](https://apify.com) — search actor store for "YouTube Transcript Scraper"
-- [Railway](https://railway.app) — for 24/7 cloud execution
-- [TradingView](https://www.tradingview.com) — charting + MCP source
+**This is not financial advice.** Build your strategy properly. Run backtests. Paper trade before going live. Never risk more than you can afford to lose.

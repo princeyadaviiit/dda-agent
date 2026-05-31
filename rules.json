@@ -1,50 +1,223 @@
 {
-  "watchlist": ["BTCUSDT"],
-  "default_timeframe": "1m",
+  "strategy_name": "ICT Inner Circle Trading with Fibonacci Retracement",
+  "version": "1.0",
+  "description": "Professional trading strategy combining ICT concepts with Fibonacci retracement for high-probability setups",
 
-  "strategy": {
-    "name": "VWAP + RSI(3) + EMA(8) Scalping Strategy",
-    "sources": [],
-    "description": "Three indicators, each doing a different job. EMA(8) for trend direction, VWAP for session bias, RSI(3) for entry timing. All three must align before a trade fires."
+  "risk_management": {
+    "risk_reward_ratio": {
+      "minimum": "1:2",
+      "target": "1:3",
+      "description": "Never take trades below 1:2 RR. Aim for 1:3 when possible"
+    },
+    "position_sizing": {
+      "max_risk_per_trade": "1-2% of account",
+      "description": "Risk only 1-2% of total capital per trade"
+    },
+    "stop_loss_rules": {
+      "placement": "Below/above the order block or fair value gap that created the setup",
+      "buffer": "Add 2-5 pips buffer beyond the structure to avoid stop hunts",
+      "never": "Never move stop loss against your position"
+    }
   },
 
-  "indicators": {
-    "ema_8": "Trend direction. Price above EMA(8) = bullish momentum. Below = bearish.",
-    "vwap": "Session bias. Price above VWAP = buyers in control. Below = sellers. Resets at midnight UTC.",
-    "rsi_3": "Entry timing. RSI on 3 candles only — extremely sensitive. Below 30 in an uptrend = snap-back setup. Above 70 in a downtrend = reversal likely."
+  "market_structure_analysis": {
+    "trend_identification": {
+      "bullish": "Series of higher highs (HH) and higher lows (HL)",
+      "bearish": "Series of lower highs (LH) and lower lows (LL)",
+      "rule": "Only trade in the direction of the higher timeframe trend"
+    },
+    "timeframe_alignment": {
+      "higher_timeframe": "Daily or 4H for trend direction",
+      "entry_timeframe": "15min or 1H for precise entries",
+      "rule": "HTF trend must align with LTF setup"
+    },
+    "break_of_structure": {
+      "bos": "Break of structure - continuation signal",
+      "choch": "Change of character - potential reversal signal",
+      "rule": "Wait for BOS in trend direction before looking for entries"
+    }
   },
 
-  "bias_criteria": {
-    "bullish": ["Price is above VWAP", "Price is above EMA(8)"],
-    "bearish": ["Price is below VWAP", "Price is below EMA(8)"]
+  "ict_concepts": {
+    "order_blocks": {
+      "definition": "Last bullish candle before bearish move (or vice versa)",
+      "bullish_ob": "Last down candle before strong move up - acts as support",
+      "bearish_ob": "Last up candle before strong move down - acts as resistance",
+      "entry_rule": "Enter when price returns to order block with confirmation",
+      "validity": "Order block remains valid until fully mitigated (price trades through it)"
+    },
+
+    "fair_value_gaps": {
+      "definition": "Imbalance in price where candle wicks don't overlap",
+      "bullish_fvg": "Gap between candle 1 high and candle 3 low (upward move)",
+      "bearish_fvg": "Gap between candle 1 low and candle 3 high (downward move)",
+      "entry_rule": "Price often returns to fill 50% of FVG before continuing",
+      "confluence": "FVG + Order Block = high probability setup"
+    },
+
+    "liquidity_pools": {
+      "definition": "Areas where stop losses cluster (equal highs/lows, round numbers)",
+      "sweep": "Price moves to take liquidity then reverses",
+      "rule": "Look for liquidity sweeps at key levels before entering counter move",
+      "targets": [
+        "Equal highs/lows",
+        "Previous day high/low",
+        "Round numbers (00, 50 levels)",
+        "Trendline breaks"
+      ]
+    },
+
+    "kill_zones": {
+      "london_open": {
+        "time": "02:00 - 05:00 EST (07:00 - 10:00 GMT)",
+        "description": "High volatility, good for GBP and EUR pairs"
+      },
+      "new_york_open": {
+        "time": "08:00 - 11:00 EST (13:00 - 16:00 GMT)",
+        "description": "Highest volume, best for USD pairs and indices"
+      },
+      "asian_session": {
+        "time": "20:00 - 00:00 EST",
+        "description": "Range-bound, avoid unless clear setup"
+      },
+      "rule": "Take trades only during London or New York kill zones for best probability"
+    },
+
+    "optimal_trade_entry": {
+      "ote_zone": "0.618 to 0.786 Fibonacci retracement",
+      "description": "ICT's sweet spot for entries after impulse move",
+      "rule": "Wait for price to retrace into OTE zone before entering"
+    }
   },
 
-  "entry_rules": {
-    "long": [
-      "Price is above VWAP — buyers in control for the session",
-      "Price is above EMA(8) — uptrend confirmed",
-      "RSI(3) has dropped below 30 — short-term pullback in an uptrend, snap-back likely"
+  "fibonacci_retracement": {
+    "how_to_draw": {
+      "uptrend": "Draw from swing low to swing high",
+      "downtrend": "Draw from swing high to swing low",
+      "rule": "Use most recent significant swing points"
+    },
+    "key_levels": {
+      "0.236": "Shallow retracement - weak pullback",
+      "0.382": "Moderate retracement - acceptable entry",
+      "0.500": "50% retracement - psychological level",
+      "0.618": "Golden ratio - PRIMARY entry zone (OTE start)",
+      "0.786": "Deep retracement - OTE end, last chance entry",
+      "0.886": "Very deep - trend may be weakening"
+    },
+    "entry_strategy": {
+      "preferred_zone": "0.618 - 0.786 (OTE zone)",
+      "confirmation_required": "Wait for bullish/bearish candle pattern at Fib level",
+      "confluence": "Fib level + Order Block + FVG = highest probability"
+    }
+  },
+
+  "entry_checklist": {
+    "step_1": "Identify HTF trend (Daily/4H) - only trade WITH the trend",
+    "step_2": "Wait for impulse move in trend direction (BOS)",
+    "step_3": "Draw Fibonacci from swing low to high (or vice versa)",
+    "step_4": "Identify order blocks and FVGs in the retracement path",
+    "step_5": "Wait for price to retrace into OTE zone (0.618-0.786)",
+    "step_6": "Look for confluence: OTE + Order Block + FVG",
+    "step_7": "Check if we're in a kill zone (London/NY session)",
+    "step_8": "Wait for entry confirmation (bullish/bearish engulfing, rejection wick)",
+    "step_9": "Set stop loss below/above the order block with buffer",
+    "step_10": "Set take profit for minimum 1:2 RR, aim for 1:3",
+    "step_11": "Enter trade only if ALL conditions are met"
+  },
+
+  "entry_patterns": {
+    "bullish_setup": {
+      "market_structure": "Higher timeframe uptrend with BOS",
+      "retracement": "Price pulls back to 0.618-0.786 Fib",
+      "confluence": "Bullish order block + FVG in OTE zone",
+      "confirmation": "Bullish engulfing or hammer at support",
+      "entry": "Enter on close of confirmation candle",
+      "stop_loss": "Below order block low + buffer",
+      "take_profit": "Previous high or 1:3 RR level"
+    },
+    "bearish_setup": {
+      "market_structure": "Higher timeframe downtrend with BOS",
+      "retracement": "Price rallies to 0.618-0.786 Fib",
+      "confluence": "Bearish order block + FVG in OTE zone",
+      "confirmation": "Bearish engulfing or shooting star at resistance",
+      "entry": "Enter on close of confirmation candle",
+      "stop_loss": "Above order block high + buffer",
+      "take_profit": "Previous low or 1:3 RR level"
+    }
+  },
+
+  "trade_management": {
+    "partial_profits": {
+      "first_target": "Take 50% profit at 1:2 RR",
+      "second_target": "Let remaining 50% run to 1:3 or higher",
+      "trailing_stop": "Move stop to breakeven after 1:1.5 RR"
+    },
+    "breakeven_rule": "Move stop to entry +/- spread once trade is 1:1.5 in profit",
+    "scaling_out": "Close partial positions at key resistance/support levels",
+    "holding_winners": "Let winners run if trend remains strong and no reversal signals"
+  },
+
+  "what_to_avoid": {
+    "no_trade_zones": [
+      "During news events (NFP, FOMC, CPI)",
+      "Asian session (unless clear setup)",
+      "Low volume periods (holidays)",
+      "Choppy/ranging markets without clear structure"
     ],
-    "short": [
-      "Price is below VWAP — sellers in control",
-      "Price is below EMA(8) — downtrend confirmed",
-      "RSI(3) has spiked above 70 — overbought in a downtrend, reversal likely"
+    "bad_setups": [
+      "Trading against HTF trend",
+      "Entering before retracement to OTE zone",
+      "Taking trades with less than 1:2 RR",
+      "Entering without confirmation candle",
+      "Trading without order block or FVG confluence",
+      "Chasing price after impulse move"
+    ],
+    "emotional_rules": [
+      "Never revenge trade after a loss",
+      "Don't overtrade - quality over quantity",
+      "Stick to max 2-3 trades per day",
+      "If 2 losses in a row, stop trading for the day",
+      "Never increase position size after losses"
     ]
   },
 
-  "exit_rules": [
-    "Exit when RSI(3) crosses back above 50 (for longs) or below 50 (for shorts)",
-    "Hard stop: 0.3% below entry for longs, 0.3% above entry for shorts",
-    "Take profit at next VWAP touch or EMA(8) cross"
-  ],
+  "daily_routine": {
+    "pre_market": [
+      "Check economic calendar for high-impact news",
+      "Identify HTF trend on Daily and 4H charts",
+      "Mark key liquidity levels (previous day high/low, equal highs/lows)",
+      "Identify existing order blocks and FVGs",
+      "Set alerts for OTE zones"
+    ],
+    "during_session": [
+      "Wait for kill zone (London or NY open)",
+      "Watch for impulse moves and BOS",
+      "Draw Fibonacci on new swing points",
+      "Wait patiently for price to reach OTE zone",
+      "Only enter with full confluence and confirmation"
+    ],
+    "post_market": [
+      "Journal all trades (setup, entry, exit, emotions)",
+      "Review what worked and what didn't",
+      "Update key levels for next day",
+      "Calculate win rate and average RR",
+      "Plan for tomorrow's session"
+    ]
+  },
 
-  "risk_rules": [
-    "Risk maximum 1% of portfolio per trade",
-    "Maximum trade size capped by MAX_TRADE_SIZE_USD in .env",
-    "Maximum trades per day capped by MAX_TRADES_PER_DAY in .env",
-    "Do not trade if price is more than 1.5% away from VWAP — overextended",
-    "Paper trade first — validate this strategy on your specific asset before going live"
-  ],
+  "performance_metrics": {
+    "minimum_win_rate": "40% (with 1:3 RR, you're profitable)",
+    "target_win_rate": "50-60%",
+    "average_rr": "Maintain above 1:2.5",
+    "max_daily_loss": "Stop trading after losing 4% of account in one day",
+    "monthly_target": "Aim for 10-20% monthly return with proper risk management"
+  },
 
-  "notes": "Scalping strategy — designed for 1m to 5m timeframes. RSI(3) is intentionally fast and sensitive. Do not apply to higher timeframes."
+  "notes": {
+    "patience": "The best trades come to you. Wait for perfect setups.",
+    "discipline": "Follow the rules even when emotions say otherwise.",
+    "consistency": "Trade the same setup repeatedly to master it.",
+    "learning": "Every trade is a lesson. Journal and review regularly.",
+    "reality": "Not every day will have a setup. That's okay. Protect capital first."
+  }
 }

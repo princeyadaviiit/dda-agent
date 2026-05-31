@@ -7,7 +7,6 @@ import { createServer } from 'http';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -147,26 +146,6 @@ server.listen(PORT, () => {
   console.log(`  🔄 Auto-refresh: 5 seconds`);
   console.log('═══════════════════════════════════════════════════════════\n');
   console.log('  Press Ctrl+C to stop\n');
-
-  // Start the background cron bot loop
-  const intervalMinutes = parseInt(process.env.BOT_INTERVAL_MINUTES || '240', 10);
-  console.log(`  🤖 Bot Loop started, running every ${intervalMinutes} minute(s).`);
-  console.log('═══════════════════════════════════════════════════════════\n');
-
-  function runBot() {
-    console.log(`\n[${new Date().toISOString()}] Triggering scheduled bot execution...`);
-    exec('node bot.js', { cwd: join(__dirname, '..') }, (err, stdout, stderr) => {
-      if (stdout) console.log(stdout);
-      if (stderr) console.error(`[BOT STDERR]:\n${stderr}`);
-      if (err) console.error(`[BOT EXEC ERROR]: ${err.message}`);
-    });
-  }
-
-  // Schedule the first run after 10 seconds, then loop based on interval
-  setTimeout(() => {
-    runBot();
-    setInterval(runBot, intervalMinutes * 60 * 1000);
-  }, 10000);
 });
 
 // Graceful shutdown

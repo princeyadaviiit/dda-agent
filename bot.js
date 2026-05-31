@@ -1,23 +1,39 @@
 /**
- * Claude + TradingView MCP — Automated Trading Bot
+ * Automated Trading Bot — ICT Strategy with Binance Futures Data
  *
- * Cloud mode: runs on Railway on a schedule. Pulls candle data direct from
- * Binance (free, no auth), calculates all indicators, runs safety check,
- * executes via BitGet if everything lines up.
+ * Fetches market data from Binance Futures API (no auth required for market data).
+ * Executes trades on Delta Exchange India.
+ * Uses TradingView only for visual analysis (drawing entry/TP/SL on chart).
  *
- * Local mode: run manually — node bot.js
- * Cloud mode: deploy to Railway, set env vars, Railway triggers on cron schedule
+ * Architecture:
+ * 1. Bot fetches OHLCV data from Binance Futures API
+ * 2. Bot calculates indicators (EMA, VWAP, RSI)
+ * 3. Bot runs ICT strategy safety checks
+ * 4. Bot executes trades on Delta Exchange if conditions pass
+ * 5. Bot draws visual analysis on TradingView chart (optional)
+ * 6. Bot logs all trades to trades.csv
+ *
+ * Usage: node bot.js
  */
 
 import "dotenv/config";
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from "fs";
 import crypto from "crypto";
 import { execSync } from "child_process";
+import { drawVisualAnalysis, clearChartDrawings } from "./visual-analysis.js";
+import { addPosition, updatePositionPnL, getOpenPositions } from "./position-manager.js";
+import {
+  fetchCandles,
+  getCurrentPrice,
+  testConnection,
+  convertTimeframeToBinanceInterval,
+  convertSymbolToBinance,
+} from "./binance-client.js";
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
 
 function checkOnboarding() {
-  const required = ["BITGET_API_KEY", "BITGET_SECRET_KEY", "BITGET_PASSPHRASE"];
+  const required = ["DELTA_API_KEY", "DELTA_API_SECRET"];
   const missing = required.filter((k) => !process.env[k]);
 
   if (!existsSync(".env")) {
@@ -27,25 +43,26 @@ function checkOnboarding() {
     writeFileSync(
       ".env",
       [
-        "# BitGet credentials",
-        "BITGET_API_KEY=",
-        "BITGET_SECRET_KEY=",
-        "BITGET_PASSPHRASE=",
+        "# Delta Exchange India credentials",
+        "DELTA_API_KEY=",
+        "DELTA_API_SECRET=",
+        "DELTA_BASE_URL=https://api.india.delta.exchange",
         "",
         "# Trading config",
         "PORTFOLIO_VALUE_USD=1000",
         "MAX_TRADE_SIZE_USD=100",
         "MAX_TRADES_PER_DAY=3",
         "PAPER_TRADING=true",
-        "SYMBOL=BTCUSDT",
-        "TIMEFRAME=4H",
+        "SYMBOL=BTCUSD",
+        "TIMEFRAME_HTF=4H",
+        "TIMEFRAME_LTF=15m",
       ].join("\n") + "\n",
     );
     try {
       execSync("open .env");
-    } catch {}
+    } catch { }
     console.log(
-      "Fill in your BitGet credentials in .env then re-run: node bot.js\n",
+      "Fill in your Delta Exchange credentials in .env then re-run: node bot.js\n",
     );
     process.exit(0);
   }
@@ -55,35 +72,38 @@ function checkOnboarding() {
     console.log("Opening .env for you now...\n");
     try {
       execSync("open .env");
-    } catch {}
+    } catch { }
     console.log("Add the missing values then re-run: node bot.js\n");
     process.exit(0);
   }
 
-  // Always print the CSV location so users know where to find their trade log
   const csvPath = new URL("trades.csv", import.meta.url).pathname;
   console.log(`\n📄 Trade log: ${csvPath}`);
   console.log(
     `   Open in Google Sheets or Excel any time — or tell Claude to move it:\n` +
-      `   "Move my trades.csv to ~/Desktop" or "Move it to my Documents folder"\n`,
+    `   "Move my trades.csv to ~/Desktop" or "Move it to my Documents folder"\n`,
   );
 }
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
 const CONFIG = {
-  symbol: process.env.SYMBOL || "BTCUSDT",
-  timeframe: process.env.TIMEFRAME || "4H",
+  symbol: process.env.SYMBOL || "BTCUSD",
+  timeframeHTF: process.env.TIMEFRAME_HTF || "4H",
+  timeframeLTF: process.env.TIMEFRAME_LTF || "15m",
   portfolioValue: parseFloat(process.env.PORTFOLIO_VALUE_USD || "1000"),
   maxTradeSizeUSD: parseFloat(process.env.MAX_TRADE_SIZE_USD || "100"),
   maxTradesPerDay: parseInt(process.env.MAX_TRADES_PER_DAY || "3"),
   paperTrading: process.env.PAPER_TRADING !== "false",
-  tradeMode: process.env.TRADE_MODE || "spot",
-  bitget: {
-    apiKey: process.env.BITGET_API_KEY,
-    secretKey: process.env.BITGET_SECRET_KEY,
-    passphrase: process.env.BITGET_PASSPHRASE,
-    baseUrl: process.env.BITGET_BASE_URL || "https://api.bitget.com",
+  tradeMode: process.env.TRADE_MODE || "futures",
+  leverage: parseInt(process.env.LEVERAGE || "5"),
+  riskRewardRatio: parseFloat(process.env.RISK_REWARD_RATIO || "2"),
+  allowLong: process.env.ALLOW_LONG !== "false",
+  allowShort: process.env.ALLOW_SHORT !== "false",
+  delta: {
+    apiKey: process.env.DELTA_API_KEY,
+    apiSecret: process.env.DELTA_API_SECRET,
+    baseUrl: process.env.DELTA_BASE_URL || "https://api.india.delta.exchange",
   },
 };
 
@@ -107,36 +127,31 @@ function countTodaysTrades(log) {
   ).length;
 }
 
-// ─── Market Data (Binance public API — free, no auth) ───────────────────────
+// ─── Market Data (Binance Futures API) ──────────────────────────────────────
 
-async function fetchCandles(symbol, interval, limit = 100) {
-  // Map our timeframe format to Binance interval format
-  const intervalMap = {
-    "1m": "1m",
-    "3m": "3m",
-    "5m": "5m",
-    "15m": "15m",
-    "30m": "30m",
-    "1H": "1h",
-    "4H": "4h",
-    "1D": "1d",
-    "1W": "1w",
-  };
-  const binanceInterval = intervalMap[interval] || "1m";
+/**
+ * Fetch candles from Binance Futures API
+ * @param {string} symbol - Trading symbol (BTCUSD, ETHUSD)
+ * @param {string} timeframe - Timeframe (15m, 4H, 1D)
+ * @param {number} limit - Number of candles (default 100)
+ * @returns {Promise<Array>} Array of candle objects
+ */
+async function fetchMarketData(symbol, timeframe, limit = 100) {
+  // Convert symbol to Binance format (BTCUSD -> BTCUSDT)
+  const binanceSymbol = convertSymbolToBinance(symbol);
 
-  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
-  const data = await res.json();
+  // Convert timeframe to Binance interval (4H -> 4h)
+  const binanceInterval = convertTimeframeToBinanceInterval(timeframe);
 
-  return data.map((k) => ({
-    time: k[0],
-    open: parseFloat(k[1]),
-    high: parseFloat(k[2]),
-    low: parseFloat(k[3]),
-    close: parseFloat(k[4]),
-    volume: parseFloat(k[5]),
-  }));
+  console.log(`  📊 Fetching ${limit} candles for ${binanceSymbol} (${binanceInterval}) from Binance Futures...`);
+
+  try {
+    const candles = await fetchCandles(binanceSymbol, binanceInterval, limit);
+    console.log(`  ✅ Loaded ${candles.length} candles`);
+    return candles;
+  } catch (error) {
+    throw new Error(`Failed to fetch market data: ${error.message}`);
+  }
 }
 
 // ─── Indicator Calculations ──────────────────────────────────────────────────
@@ -166,7 +181,6 @@ function calcRSI(closes, period = 14) {
   return 100 - 100 / (1 + rs);
 }
 
-// VWAP — session-based, resets at midnight UTC
 function calcVWAP(candles) {
   const midnightUTC = new Date();
   midnightUTC.setUTCHours(0, 0, 0, 0);
@@ -180,9 +194,280 @@ function calcVWAP(candles) {
   return cumVol === 0 ? null : cumTPV / cumVol;
 }
 
-// ─── Safety Check ───────────────────────────────────────────────────────────
+// ─── TP/SL Calculation (ICT-based with Risk:Reward) ──────────────────────────
 
-function runSafetyCheck(price, ema8, vwap, rsi3, rules) {
+function calculateTPSL(entryPrice, ictAnalysis, riskRewardRatio) {
+  const isBullish = ictAnalysis.htfTrend === "BULLISH";
+  const bufferPips = 5; // 5 pip buffer to avoid stop hunts
+  const pipValue = entryPrice * 0.0001; // 1 pip = 0.01% of price
+
+  let stopLoss = 0;
+  let takeProfit = 0;
+
+  if (isBullish) {
+    // LONG position: SL below order block, TP above entry
+    if (ictAnalysis.orderBlocks.length > 0) {
+      // Use the most recent bullish order block
+      const orderBlock = ictAnalysis.orderBlocks[ictAnalysis.orderBlocks.length - 1];
+      stopLoss = orderBlock.low - (bufferPips * pipValue);
+    } else {
+      // Fallback: use 2% below entry
+      stopLoss = entryPrice * 0.98;
+    }
+
+    // Calculate risk
+    const risk = entryPrice - stopLoss;
+
+    // Calculate TP based on risk:reward ratio
+    takeProfit = entryPrice + (risk * riskRewardRatio);
+
+  } else {
+    // SHORT position: SL above order block, TP below entry
+    if (ictAnalysis.orderBlocks.length > 0) {
+      // Use the most recent bearish order block
+      const orderBlock = ictAnalysis.orderBlocks[ictAnalysis.orderBlocks.length - 1];
+      stopLoss = orderBlock.high + (bufferPips * pipValue);
+    } else {
+      // Fallback: use 2% above entry
+      stopLoss = entryPrice * 1.02;
+    }
+
+    // Calculate risk
+    const risk = stopLoss - entryPrice;
+
+    // Calculate TP based on risk:reward ratio
+    takeProfit = entryPrice - (risk * riskRewardRatio);
+  }
+
+  const riskAmount = Math.abs(entryPrice - stopLoss);
+  const rewardAmount = Math.abs(takeProfit - entryPrice);
+  const actualRR = rewardAmount / riskAmount;
+
+  return {
+    stopLoss,
+    takeProfit,
+    risk: riskAmount,
+    reward: rewardAmount,
+    riskRewardRatio: actualRR,
+  };
+}
+
+// ─── ICT Concepts Implementation ──────────────────────────────────────────────
+
+function findSwingPoints(candles, lookback = 5) {
+  const swings = { highs: [], lows: [] };
+
+  for (let i = lookback; i < candles.length - lookback; i++) {
+    let isSwingHigh = true;
+    let isSwingLow = true;
+
+    for (let j = 1; j <= lookback; j++) {
+      if (candles[i].high <= candles[i - j].high || candles[i].high <= candles[i + j].high) {
+        isSwingHigh = false;
+      }
+      if (candles[i].low >= candles[i - j].low || candles[i].low >= candles[i + j].low) {
+        isSwingLow = false;
+      }
+    }
+
+    if (isSwingHigh) swings.highs.push({ index: i, price: candles[i].high });
+    if (isSwingLow) swings.lows.push({ index: i, price: candles[i].low });
+  }
+
+  return swings;
+}
+
+function calcFibonacciLevels(swingLow, swingHigh, isBullish) {
+  const diff = swingHigh - swingLow;
+
+  if (isBullish) {
+    return {
+      "0.000": swingLow,
+      "0.236": swingLow + diff * 0.236,
+      "0.382": swingLow + diff * 0.382,
+      "0.500": swingLow + diff * 0.500,
+      "0.618": swingLow + diff * 0.618,
+      "0.786": swingLow + diff * 0.786,
+      "1.000": swingHigh,
+    };
+  } else {
+    return {
+      "0.000": swingHigh,
+      "0.236": swingHigh - diff * 0.236,
+      "0.382": swingHigh - diff * 0.382,
+      "0.500": swingHigh - diff * 0.500,
+      "0.618": swingHigh - diff * 0.618,
+      "0.786": swingHigh - diff * 0.786,
+      "1.000": swingLow,
+    };
+  }
+}
+
+function isInOTEZone(price, fibLevels, isBullish) {
+  const ote618 = fibLevels["0.618"];
+  const ote786 = fibLevels["0.786"];
+
+  if (isBullish) {
+    return price >= ote786 && price <= ote618;
+  } else {
+    return price <= ote786 && price >= ote618;
+  }
+}
+
+function detectOrderBlocks(candles, isBullish) {
+  const orderBlocks = [];
+
+  for (let i = 1; i < candles.length - 1; i++) {
+    if (isBullish) {
+      const isBearishCandle = candles[i].close < candles[i].open;
+      const strongMoveUp = candles[i + 1].close > candles[i].high * 1.002;
+
+      if (isBearishCandle && strongMoveUp) {
+        orderBlocks.push({
+          index: i,
+          high: candles[i].high,
+          low: candles[i].low,
+          type: "bullish",
+        });
+      }
+    } else {
+      const isBullishCandle = candles[i].close > candles[i].open;
+      const strongMoveDown = candles[i + 1].close < candles[i].low * 0.998;
+
+      if (isBullishCandle && strongMoveDown) {
+        orderBlocks.push({
+          index: i,
+          high: candles[i].high,
+          low: candles[i].low,
+          type: "bearish",
+        });
+      }
+    }
+  }
+
+  return orderBlocks.slice(-3);
+}
+
+function detectFairValueGaps(candles, isBullish) {
+  const fvgs = [];
+
+  for (let i = 2; i < candles.length; i++) {
+    if (isBullish) {
+      const gap = candles[i].low - candles[i - 2].high;
+      if (gap > 0) {
+        fvgs.push({
+          index: i,
+          high: candles[i].low,
+          low: candles[i - 2].high,
+          type: "bullish",
+        });
+      }
+    } else {
+      const gap = candles[i - 2].low - candles[i].high;
+      if (gap > 0) {
+        fvgs.push({
+          index: i,
+          high: candles[i - 2].low,
+          low: candles[i].high,
+          type: "bearish",
+        });
+      }
+    }
+  }
+
+  return fvgs.slice(-3);
+}
+
+function isInKillZone() {
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+
+  const londonOpen = utcHour >= 7 && utcHour < 10;
+  const nyOpen = utcHour >= 13 && utcHour < 16;
+
+  return { inKillZone: londonOpen || nyOpen, session: londonOpen ? "London" : nyOpen ? "New York" : "None" };
+}
+
+function detectConfirmationPattern(candles, isBullish) {
+  if (candles.length < 2) return { found: false, pattern: "None" };
+
+  const current = candles[candles.length - 1];
+  const previous = candles[candles.length - 2];
+
+  const currentBody = Math.abs(current.close - current.open);
+  const previousBody = Math.abs(previous.close - previous.open);
+
+  if (isBullish) {
+    const isBullishEngulfing =
+      current.close > current.open &&
+      previous.close < previous.open &&
+      current.open <= previous.close &&
+      current.close >= previous.open;
+
+    if (isBullishEngulfing) return { found: true, pattern: "Bullish Engulfing" };
+
+    const isHammer =
+      current.close > current.open &&
+      (current.low < current.open - currentBody * 2) &&
+      (current.high - current.close < currentBody * 0.3);
+
+    if (isHammer) return { found: true, pattern: "Hammer" };
+
+    const isBullishRejection =
+      current.close > current.open &&
+      (current.low < current.open - currentBody) &&
+      currentBody > previousBody * 0.5;
+
+    if (isBullishRejection) return { found: true, pattern: "Bullish Rejection" };
+
+  } else {
+    const isBearishEngulfing =
+      current.close < current.open &&
+      previous.close > previous.open &&
+      current.open >= previous.close &&
+      current.close <= previous.open;
+
+    if (isBearishEngulfing) return { found: true, pattern: "Bearish Engulfing" };
+
+    const isShootingStar =
+      current.close < current.open &&
+      (current.high > current.open + currentBody * 2) &&
+      (current.close - current.low < currentBody * 0.3);
+
+    if (isShootingStar) return { found: true, pattern: "Shooting Star" };
+
+    const isBearishRejection =
+      current.close < current.open &&
+      (current.high > current.open + currentBody) &&
+      currentBody > previousBody * 0.5;
+
+    if (isBearishRejection) return { found: true, pattern: "Bearish Rejection" };
+  }
+
+  return { found: false, pattern: "None" };
+}
+
+function detectBreakOfStructure(candles, isBullish) {
+  if (candles.length < 10) return false;
+
+  const swings = findSwingPoints(candles, 3);
+
+  if (isBullish) {
+    if (swings.highs.length < 2) return false;
+    const lastHigh = swings.highs[swings.highs.length - 1];
+    const prevHigh = swings.highs[swings.highs.length - 2];
+    return lastHigh.price > prevHigh.price;
+  } else {
+    if (swings.lows.length < 2) return false;
+    const lastLow = swings.lows[swings.lows.length - 1];
+    const prevLow = swings.lows[swings.lows.length - 2];
+    return lastLow.price < prevLow.price;
+  }
+}
+
+// ─── ICT Safety Check (Full Rules Implementation) ────────────────────────────
+
+function runICTSafetyCheck(ictAnalysis, rules) {
   const results = [];
 
   const check = (label, required, actual, pass) => {
@@ -192,90 +477,120 @@ function runSafetyCheck(price, ema8, vwap, rsi3, rules) {
     console.log(`     Required: ${required} | Actual: ${actual}`);
   };
 
-  console.log("\n── Safety Check ─────────────────────────────────────────\n");
+  console.log("\n── ICT Strategy Safety Check (Full Rules) ──────────────\n");
+  console.log(`Strategy: ${rules.strategy_name}\n`);
 
-  // Determine bias first
-  const bullishBias = price > vwap && price > ema8;
-  const bearishBias = price < vwap && price < ema8;
+  // Step 1: HTF Trend Direction
+  check(
+    "HTF Trend Direction",
+    "Clear bullish or bearish trend",
+    ictAnalysis.htfTrend,
+    ictAnalysis.htfTrend !== "NEUTRAL"
+  );
 
-  if (bullishBias) {
-    console.log("  Bias: BULLISH — checking long entry conditions\n");
-
-    // 1. Price above VWAP
-    check(
-      "Price above VWAP (buyers in control)",
-      `> ${vwap.toFixed(2)}`,
-      price.toFixed(2),
-      price > vwap,
-    );
-
-    // 2. Price above EMA(8)
-    check(
-      "Price above EMA(8) (uptrend confirmed)",
-      `> ${ema8.toFixed(2)}`,
-      price.toFixed(2),
-      price > ema8,
-    );
-
-    // 3. RSI(3) pullback
-    check(
-      "RSI(3) below 30 (snap-back setup in uptrend)",
-      "< 30",
-      rsi3.toFixed(2),
-      rsi3 < 30,
-    );
-
-    // 4. Not overextended from VWAP
-    const distFromVWAP = Math.abs((price - vwap) / vwap) * 100;
-    check(
-      "Price within 1.5% of VWAP (not overextended)",
-      "< 1.5%",
-      `${distFromVWAP.toFixed(2)}%`,
-      distFromVWAP < 1.5,
-    );
-  } else if (bearishBias) {
-    console.log("  Bias: BEARISH — checking short entry conditions\n");
-
-    check(
-      "Price below VWAP (sellers in control)",
-      `< ${vwap.toFixed(2)}`,
-      price.toFixed(2),
-      price < vwap,
-    );
-
-    check(
-      "Price below EMA(8) (downtrend confirmed)",
-      `< ${ema8.toFixed(2)}`,
-      price.toFixed(2),
-      price < ema8,
-    );
-
-    check(
-      "RSI(3) above 70 (reversal setup in downtrend)",
-      "> 70",
-      rsi3.toFixed(2),
-      rsi3 > 70,
-    );
-
-    const distFromVWAP = Math.abs((price - vwap) / vwap) * 100;
-    check(
-      "Price within 1.5% of VWAP (not overextended)",
-      "< 1.5%",
-      `${distFromVWAP.toFixed(2)}%`,
-      distFromVWAP < 1.5,
-    );
-  } else {
-    console.log("  Bias: NEUTRAL — no clear direction. No trade.\n");
-    results.push({
-      label: "Market bias",
-      required: "Bullish or bearish",
-      actual: "Neutral",
-      pass: false,
-    });
+  if (ictAnalysis.htfTrend === "NEUTRAL") {
+    console.log("\n❌ No clear HTF trend. No trade.\n");
+    return { results, allPass: false, analysis: ictAnalysis };
   }
 
-  const allPass = results.every((r) => r.pass);
-  return { results, allPass };
+  const isBullish = ictAnalysis.htfTrend === "BULLISH";
+
+  // Step 2: Break of Structure (BOS)
+  check(
+    "Break of Structure (BOS)",
+    "BOS in trend direction",
+    ictAnalysis.bos ? "Confirmed" : "Not found",
+    ictAnalysis.bos
+  );
+
+  // Step 3: Fibonacci OTE Zone (0.618-0.786)
+  check(
+    "Fibonacci OTE Zone",
+    "Price in 0.618-0.786 retracement",
+    ictAnalysis.inOTE ? `In OTE (${ictAnalysis.fibLevels["0.618"].toFixed(2)} - ${ictAnalysis.fibLevels["0.786"].toFixed(2)})` : "Outside OTE",
+    ictAnalysis.inOTE
+  );
+
+  // Step 4: Order Block Confluence
+  check(
+    "Order Block",
+    "Order block present in setup area",
+    ictAnalysis.orderBlocks.length > 0 ? `${ictAnalysis.orderBlocks.length} found` : "None",
+    ictAnalysis.orderBlocks.length > 0
+  );
+
+  // Step 5: Fair Value Gap (FVG)
+  check(
+    "Fair Value Gap (FVG)",
+    "FVG present for confluence",
+    ictAnalysis.fvgs.length > 0 ? `${ictAnalysis.fvgs.length} found` : "None",
+    ictAnalysis.fvgs.length > 0
+  );
+
+  // Step 6: Kill Zone Timing
+  check(
+    "Kill Zone",
+    "London (07:00-10:00 GMT) or NY (13:00-16:00 GMT)",
+    ictAnalysis.killZone.session,
+    ictAnalysis.killZone.inKillZone
+  );
+
+  // Step 7: Confirmation Candle Pattern
+  check(
+    "Confirmation Pattern",
+    isBullish ? "Bullish engulfing/hammer/rejection" : "Bearish engulfing/shooting star/rejection",
+    ictAnalysis.confirmation.pattern,
+    ictAnalysis.confirmation.found
+  );
+
+  // Step 8: Timeframe Alignment
+  const biasAligned = isBullish ? ictAnalysis.ltfBullish : ictAnalysis.ltfBearish;
+  check(
+    "Timeframe Alignment",
+    `LTF bias matches HTF ${ictAnalysis.htfTrend}`,
+    biasAligned ? "Aligned" : "Not aligned",
+    biasAligned
+  );
+
+  // Step 9: Confluence Check (OTE + Order Block + FVG)
+  const hasConfluence = ictAnalysis.inOTE && ictAnalysis.orderBlocks.length > 0 && ictAnalysis.fvgs.length > 0;
+  check(
+    "Confluence",
+    "OTE + Order Block + FVG",
+    hasConfluence ? "All 3 present" : "Missing elements",
+    hasConfluence
+  );
+
+  // ─── Majority Pass Logic (Execute if majority of conditions pass) ───────────
+  const totalConditions = results.length;
+  const passedConditions = results.filter(r => r.pass).length;
+  const passPercentage = (passedConditions / totalConditions) * 100;
+  const majorityPass = passedConditions > (totalConditions / 2); // More than 50%
+
+  console.log(`\n── Trade Decision ────────────────────────────────────────`);
+  console.log(`   Conditions Passed: ${passedConditions}/${totalConditions} (${passPercentage.toFixed(1)}%)`);
+  console.log(`   Threshold: Majority (>50%) required`);
+
+  if (majorityPass) {
+    console.log(`\n✅ MAJORITY CONDITIONS MET — TRADE APPROVED\n`);
+    console.log(`Setup Type: ${isBullish ? "LONG" : "SHORT"}`);
+    console.log(`Entry Zone: ${ictAnalysis.fibLevels["0.618"] ? ictAnalysis.fibLevels["0.618"].toFixed(2) + " - " + ictAnalysis.fibLevels["0.786"].toFixed(2) : "N/A"}`);
+    console.log(`Stop Loss: ${isBullish ? "Below" : "Above"} order block with 2-5 pip buffer`);
+    console.log(`Take Profit: Minimum 1:2 RR, target 1:3 RR\n`);
+
+    const failed = results.filter(r => !r.pass);
+    if (failed.length > 0) {
+      console.log(`⚠️  Note: ${failed.length} condition(s) failed but trade approved by majority:`);
+      failed.forEach(f => console.log(`   • ${f.label}`));
+      console.log();
+    }
+  } else {
+    console.log(`\n🚫 TRADE BLOCKED — Majority conditions NOT met\n`);
+    const failed = results.filter(r => !r.pass).map(r => r.label).join(", ");
+    console.log(`Failed checks: ${failed}\n`);
+  }
+
+  return { results, allPass: majorityPass, passedConditions, totalConditions, passPercentage, analysis: ictAnalysis };
 }
 
 // ─── Trade Limits ────────────────────────────────────────────────────────────
@@ -297,7 +612,7 @@ function checkTradeLimits(log) {
   );
 
   const tradeSize = Math.min(
-    CONFIG.portfolioValue * 0.01,
+    CONFIG.portfolioValue * 0.5,
     CONFIG.maxTradeSizeUSD,
   );
 
@@ -315,63 +630,72 @@ function checkTradeLimits(log) {
   return true;
 }
 
-// ─── BitGet Execution ────────────────────────────────────────────────────────
+// ─── Delta Exchange Execution (Futures with Leverage) ────────────────────────
 
-function signBitGet(timestamp, method, path, body = "") {
-  const message = `${timestamp}${method}${path}${body}`;
+function signDelta(method, timestamp, path, body = "") {
+  const message = method + timestamp + path + body;
   return crypto
-    .createHmac("sha256", CONFIG.bitget.secretKey)
+    .createHmac("sha256", CONFIG.delta.apiSecret)
     .update(message)
-    .digest("base64");
+    .digest("hex");
 }
 
-async function placeBitGetOrder(symbol, side, sizeUSD, price) {
-  const quantity = (sizeUSD / price).toFixed(6);
-  const timestamp = Date.now().toString();
-  const path =
-    CONFIG.tradeMode === "spot"
-      ? "/api/v2/spot/trade/placeOrder"
-      : "/api/v2/mix/order/placeOrder";
+async function placeDeltaOrder(symbol, side, sizeUSD, price, leverage, stopLoss, takeProfit) {
+  // Calculate quantity based on leverage
+  const quantity = ((sizeUSD * leverage) / price).toFixed(4);
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const path = "/v2/orders";
 
-  const body = JSON.stringify({
-    symbol,
-    side,
-    orderType: "market",
-    quantity,
-    ...(CONFIG.tradeMode === "futures" && {
-      productType: "USDT-FUTURES",
-      marginMode: "isolated",
-      marginCoin: "USDT",
-    }),
-  });
+  const orderPayload = {
+    product_id: symbol,
+    size: quantity,
+    side: side, // "buy" or "sell"
+    order_type: "market_order",
+    time_in_force: "ioc",
+    leverage: leverage.toString(),
+  };
 
-  const signature = signBitGet(timestamp, "POST", path, body);
+  // Add stop loss and take profit as bracket orders (if supported)
+  // Note: Delta Exchange may require separate API calls for TP/SL
+  // This is a simplified version - adjust based on Delta's actual API
 
-  const res = await fetch(`${CONFIG.bitget.baseUrl}${path}`, {
+  const body = JSON.stringify(orderPayload);
+  const signature = signDelta("POST", timestamp, path, body);
+
+  const res = await fetch(`${CONFIG.delta.baseUrl}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "ACCESS-KEY": CONFIG.bitget.apiKey,
-      "ACCESS-SIGN": signature,
-      "ACCESS-TIMESTAMP": timestamp,
-      "ACCESS-PASSPHRASE": CONFIG.bitget.passphrase,
+      "api-key": CONFIG.delta.apiKey,
+      signature: signature,
+      timestamp: timestamp,
     },
     body,
   });
 
   const data = await res.json();
-  if (data.code !== "00000") {
-    throw new Error(`BitGet order failed: ${data.msg}`);
+  if (!data.success) {
+    throw new Error(`Delta Exchange order failed: ${data.error?.message || JSON.stringify(data)}`);
   }
 
-  return data.data;
+  console.log(`\n✅ Order placed on Delta Exchange:`);
+  console.log(`   ${side.toUpperCase()} ${quantity} ${symbol} @ $${price.toFixed(2)}`);
+  console.log(`   Leverage: ${leverage}x`);
+  console.log(`   Stop Loss: $${stopLoss.toFixed(2)}`);
+  console.log(`   Take Profit: $${takeProfit.toFixed(2)}\n`);
+
+  return {
+    ...data.result,
+    stopLoss,
+    takeProfit,
+    leverage,
+  };
 }
 
-// ─── Tax CSV Logging ─────────────────────────────────────────────────────────
+// ─── CSV Logging ─────────────────────────────────────────────────────────────
 
 const CSV_FILE = "trades.csv";
 
-// Always ensure trades.csv exists with headers — open it in Excel/Sheets any time
 function initCsv() {
   if (!existsSync(CSV_FILE)) {
     const funnyNote = `,,,,,,,,,,,"NOTE","Hey, if you're at this stage of the video, you must be enjoying it... perhaps you could hit subscribe now? :)"`;
@@ -381,6 +705,7 @@ function initCsv() {
     );
   }
 }
+
 const CSV_HEADERS = [
   "Date",
   "Time (UTC)",
@@ -442,7 +767,7 @@ function writeTradeCsv(logEntry) {
   const row = [
     date,
     time,
-    "BitGet",
+    "Delta Exchange India",
     logEntry.symbol,
     side,
     quantity,
@@ -463,7 +788,6 @@ function writeTradeCsv(logEntry) {
   console.log(`Tax record saved → ${CSV_FILE}`);
 }
 
-// Tax summary command: node bot.js --tax-summary
 function generateTaxSummary() {
   if (!existsSync(CSV_FILE)) {
     console.log("No trades.csv found — no trades have been recorded yet.");
@@ -491,25 +815,110 @@ function generateTaxSummary() {
   console.log("─────────────────────────────────────────────────────────\n");
 }
 
+// ─── ICT Analysis (Combines all ICT concepts) ─────────────────────────────────
+
+function performICTAnalysis(candlesHTF, candlesLTF) {
+  const closesHTF = candlesHTF.map((c) => c.close);
+  const closesLTF = candlesLTF.map((c) => c.close);
+  const priceHTF = closesHTF[closesHTF.length - 1];
+  const priceLTF = closesLTF[closesLTF.length - 1];
+
+  // HTF Trend Direction
+  const ema8HTF = calcEMA(closesHTF, 8);
+  const vwapHTF = calcVWAP(candlesHTF);
+  const htfTrendBullish = priceHTF > vwapHTF && priceHTF > ema8HTF;
+  const htfTrendBearish = priceHTF < vwapHTF && priceHTF < ema8HTF;
+  const htfTrend = htfTrendBullish ? "BULLISH" : htfTrendBearish ? "BEARISH" : "NEUTRAL";
+
+  // LTF Bias
+  const ema8LTF = calcEMA(closesLTF, 8);
+  const vwapLTF = calcVWAP(candlesLTF);
+  const ltfBullish = priceLTF > vwapLTF && priceLTF > ema8LTF;
+  const ltfBearish = priceLTF < vwapLTF && priceLTF < ema8LTF;
+
+  // Swing points for Fibonacci
+  const swings = findSwingPoints(candlesHTF, 5);
+  let fibLevels = null;
+  let inOTE = false;
+
+  if (htfTrendBullish && swings.lows.length > 0 && swings.highs.length > 0) {
+    const swingLow = swings.lows[swings.lows.length - 1].price;
+    const swingHigh = swings.highs[swings.highs.length - 1].price;
+    fibLevels = calcFibonacciLevels(swingLow, swingHigh, true);
+    inOTE = isInOTEZone(priceLTF, fibLevels, true);
+  } else if (htfTrendBearish && swings.lows.length > 0 && swings.highs.length > 0) {
+    const swingLow = swings.lows[swings.lows.length - 1].price;
+    const swingHigh = swings.highs[swings.highs.length - 1].price;
+    fibLevels = calcFibonacciLevels(swingLow, swingHigh, false);
+    inOTE = isInOTEZone(priceLTF, fibLevels, false);
+  }
+
+  // Order Blocks and FVGs
+  const orderBlocks = htfTrend !== "NEUTRAL" ? detectOrderBlocks(candlesLTF, htfTrendBullish) : [];
+  const fvgs = htfTrend !== "NEUTRAL" ? detectFairValueGaps(candlesLTF, htfTrendBullish) : [];
+
+  // Kill Zone
+  const killZone = isInKillZone();
+
+  // Confirmation Pattern
+  const confirmation = htfTrend !== "NEUTRAL" ? detectConfirmationPattern(candlesLTF, htfTrendBullish) : { found: false, pattern: "None" };
+
+  // Break of Structure
+  const bos = htfTrend !== "NEUTRAL" ? detectBreakOfStructure(candlesHTF, htfTrendBullish) : false;
+
+  return {
+    htfTrend,
+    ltfBullish,
+    ltfBearish,
+    priceHTF,
+    priceLTF,
+    ema8HTF,
+    vwapHTF,
+    ema8LTF,
+    vwapLTF,
+    fibLevels: fibLevels || {},
+    inOTE,
+    orderBlocks,
+    fvgs,
+    killZone,
+    confirmation,
+    bos,
+    swings,
+  };
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function run() {
   checkOnboarding();
   initCsv();
   console.log("═══════════════════════════════════════════════════════════");
-  console.log("  Claude Trading Bot");
+  console.log("  Automated Trading Bot — ICT Strategy");
   console.log(`  ${new Date().toISOString()}`);
   console.log(
     `  Mode: ${CONFIG.paperTrading ? "📋 PAPER TRADING" : "🔴 LIVE TRADING"}`,
   );
   console.log("═══════════════════════════════════════════════════════════");
 
-  // Load strategy
-  const rules = JSON.parse(readFileSync("rules.json", "utf8"));
-  console.log(`\nStrategy: ${rules.strategy.name}`);
-  console.log(`Symbol: ${CONFIG.symbol} | Timeframe: ${CONFIG.timeframe}`);
+  const symbol = CONFIG.symbol;
+  console.log(`\n📝 Trading Symbol: ${symbol}`);
 
-  // Load log and check daily limits
+  // Test Binance connection
+  console.log("\n── Testing Binance Futures API Connection ──────────────\n");
+  const connected = await testConnection();
+  if (!connected) {
+    console.log("🚫 Failed to connect to Binance Futures API");
+    console.log("   Check your internet connection and try again.");
+    process.exit(1);
+  }
+  console.log("✅ Connected to Binance Futures API");
+
+  // Load ICT rules from rules.json
+  const rules = JSON.parse(readFileSync("rules.json", "utf8"));
+  console.log(`\nStrategy: ${rules.strategy_name}`);
+  console.log(`Symbol: ${symbol} | HTF: ${CONFIG.timeframeHTF} | LTF: ${CONFIG.timeframeLTF}`);
+  console.log(`Mode: ${CONFIG.tradeMode.toUpperCase()}`);
+
   const log = loadLog();
   const withinLimits = checkTradeLimits(log);
   if (!withinLimits) {
@@ -517,110 +926,230 @@ async function run() {
     return;
   }
 
-  // Fetch candle data — need enough for EMA(8) + full session for VWAP
-  console.log("\n── Fetching market data from Binance ───────────────────\n");
-  const candles = await fetchCandles(CONFIG.symbol, CONFIG.timeframe, 500);
-  const closes = candles.map((c) => c.close);
-  const price = closes[closes.length - 1];
-  console.log(`  Current price: $${price.toFixed(2)}`);
+  console.log("\n── Fetching market data from Binance Futures ──────────\n");
 
-  // Calculate indicators
-  const ema8 = calcEMA(closes, 8);
-  const vwap = calcVWAP(candles);
-  const rsi3 = calcRSI(closes, 3);
+  // Fetch candles from Binance Futures API
+  console.log(`  📊 Higher Timeframe (${CONFIG.timeframeHTF}) - Trend Direction`);
+  const candlesHTF = await fetchMarketData(symbol, CONFIG.timeframeHTF, 100);
 
-  console.log(`  EMA(8):  $${ema8.toFixed(2)}`);
-  console.log(`  VWAP:    $${vwap ? vwap.toFixed(2) : "N/A"}`);
-  console.log(`  RSI(3):  ${rsi3 ? rsi3.toFixed(2) : "N/A"}`);
+  console.log(`\n  📊 Lower Timeframe (${CONFIG.timeframeLTF}) - Entry Timing`);
+  const candlesLTF = await fetchMarketData(symbol, CONFIG.timeframeLTF, 100);
 
-  if (!vwap || !rsi3) {
-    console.log("\n⚠️  Not enough data to calculate indicators. Exiting.");
-    return;
-  }
+  // Perform full ICT analysis
+  console.log("\n── Running ICT Analysis ──────────────────────────────────\n");
+  const ictAnalysis = performICTAnalysis(candlesHTF, candlesLTF);
 
-  // Run safety check
-  const { results, allPass } = runSafetyCheck(price, ema8, vwap, rsi3, rules);
+  console.log(`  HTF Trend: ${ictAnalysis.htfTrend}`);
+  console.log(`  Current Price: $${ictAnalysis.priceLTF.toFixed(2)}`);
+  console.log(`  In OTE Zone: ${ictAnalysis.inOTE ? "YES" : "NO"}`);
+  console.log(`  Order Blocks: ${ictAnalysis.orderBlocks.length}`);
+  console.log(`  Fair Value Gaps: ${ictAnalysis.fvgs.length}`);
+  console.log(`  Kill Zone: ${ictAnalysis.killZone.session}`);
+  console.log(`  Confirmation: ${ictAnalysis.confirmation.pattern}`);
+  console.log(`  Break of Structure: ${ictAnalysis.bos ? "YES" : "NO"}`);
 
-  // Calculate position size
+  // Run ICT safety check with full rules
+  const { results, allPass, analysis } = runICTSafetyCheck(ictAnalysis, rules);
+
   const tradeSize = Math.min(
-    CONFIG.portfolioValue * 0.01,
+    CONFIG.portfolioValue * 0.5,
     CONFIG.maxTradeSizeUSD,
   );
 
-  // Decision
-  console.log("\n── Decision ─────────────────────────────────────────────\n");
-
   const logEntry = {
     timestamp: new Date().toISOString(),
-    symbol: CONFIG.symbol,
-    timeframe: CONFIG.timeframe,
-    price,
-    indicators: { ema8, vwap, rsi3 },
+    symbol,
+    price: ictAnalysis.priceLTF,
+    tradeSize,
     conditions: results,
     allPass,
-    tradeSize,
-    orderPlaced: false,
-    orderId: null,
     paperTrading: CONFIG.paperTrading,
-    limits: {
-      maxTradeSizeUSD: CONFIG.maxTradeSizeUSD,
-      maxTradesPerDay: CONFIG.maxTradesPerDay,
-      tradesToday: countTodaysTrades(log),
+    orderPlaced: false,
+    ictAnalysis: {
+      htfTrend: ictAnalysis.htfTrend,
+      inOTE: ictAnalysis.inOTE,
+      orderBlocks: ictAnalysis.orderBlocks.length,
+      fvgs: ictAnalysis.fvgs.length,
+      killZone: ictAnalysis.killZone.session,
+      confirmation: ictAnalysis.confirmation.pattern,
+      bos: ictAnalysis.bos,
     },
   };
 
-  if (!allPass) {
-    const failed = results.filter((r) => !r.pass).map((r) => r.label);
-    console.log(`🚫 TRADE BLOCKED`);
-    console.log(`   Failed conditions:`);
-    failed.forEach((f) => console.log(`   - ${f}`));
-  } else {
-    console.log(`✅ ALL CONDITIONS MET`);
+  if (allPass) {
+    console.log("\n✅ ALL ICT CONDITIONS MET — HIGH PROBABILITY SETUP\n");
+
+    const isBullish = ictAnalysis.htfTrend === "BULLISH";
+    const side = isBullish ? "buy" : "sell";
+    const positionSide = isBullish ? "long" : "short";
+
+    // Check if this direction is allowed
+    if (isBullish && !CONFIG.allowLong) {
+      console.log("🚫 LONG trades are disabled in config. Skipping.\n");
+      logEntry.error = "Long trades disabled";
+      writeTradeCsv(logEntry);
+      log.trades.push(logEntry);
+      saveLog(log);
+      return;
+    }
+
+    if (!isBullish && !CONFIG.allowShort) {
+      console.log("🚫 SHORT trades are disabled in config. Skipping.\n");
+      logEntry.error = "Short trades disabled";
+      writeTradeCsv(logEntry);
+      log.trades.push(logEntry);
+      saveLog(log);
+      return;
+    }
+
+    // Calculate TP/SL based on ICT order blocks and risk:reward ratio
+    const tpsl = calculateTPSL(ictAnalysis.priceLTF, ictAnalysis, CONFIG.riskRewardRatio);
+
+    console.log(`📊 Trade Setup:`);
+    console.log(`   Direction: ${positionSide.toUpperCase()}`);
+    console.log(`   Entry: $${ictAnalysis.priceLTF.toFixed(2)}`);
+    console.log(`   Stop Loss: $${tpsl.stopLoss.toFixed(2)} (Risk: $${tpsl.risk.toFixed(2)})`);
+    console.log(`   Take Profit: $${tpsl.takeProfit.toFixed(2)} (Reward: $${tpsl.reward.toFixed(2)})`);
+    console.log(`   Risk:Reward = 1:${tpsl.riskRewardRatio.toFixed(2)}`);
+    console.log(`   Leverage: ${CONFIG.leverage}x\n`);
 
     if (CONFIG.paperTrading) {
-      console.log(
-        `\n📋 PAPER TRADE — would buy ${CONFIG.symbol} ~$${tradeSize.toFixed(2)} at market`,
-      );
-      console.log(`   (Set PAPER_TRADING=false in .env to place real orders)`);
+      console.log(`📋 PAPER TRADE: Would execute ${side.toUpperCase()} at $${ictAnalysis.priceLTF.toFixed(2)}`);
       logEntry.orderPlaced = true;
-      logEntry.orderId = `PAPER-${Date.now()}`;
-    } else {
-      console.log(
-        `\n🔴 PLACING LIVE ORDER — $${tradeSize.toFixed(2)} BUY ${CONFIG.symbol}`,
-      );
+      logEntry.tpsl = tpsl;
+
+      // Add to position manager (paper trading)
+      const position = addPosition({
+        symbol,
+        side: positionSide,
+        entryPrice: ictAnalysis.priceLTF,
+        quantity: (tradeSize * CONFIG.leverage) / ictAnalysis.priceLTF,
+        leverage: CONFIG.leverage,
+        stopLoss: tpsl.stopLoss,
+        takeProfit: tpsl.takeProfit,
+        riskRewardRatio: tpsl.riskRewardRatio,
+        paperTrading: true,
+        ictAnalysis: {
+          htfTrend: ictAnalysis.htfTrend,
+          inOTE: ictAnalysis.inOTE,
+          orderBlocks: ictAnalysis.orderBlocks.length,
+          fvgs: ictAnalysis.fvgs.length,
+          killZone: ictAnalysis.killZone.session,
+          confirmation: ictAnalysis.confirmation.pattern,
+          bos: ictAnalysis.bos,
+        },
+      });
+
+      logEntry.positionId = position.id;
+
+      // Draw visual markers on TradingView chart
       try {
-        const order = await placeBitGetOrder(
-          CONFIG.symbol,
-          "buy",
+        await drawVisualAnalysis(ictAnalysis, position, tpsl);
+      } catch (e) {
+        console.log(`⚠️  Could not draw visual analysis: ${e.message}`);
+      }
+
+    } else {
+      try {
+        const order = await placeDeltaOrder(
+          symbol,
+          side,
           tradeSize,
-          price,
+          ictAnalysis.priceLTF,
+          CONFIG.leverage,
+          tpsl.stopLoss,
+          tpsl.takeProfit
         );
+
+        console.log(`✅ ORDER PLACED: ${side.toUpperCase()} ${symbol} at $${ictAnalysis.priceLTF.toFixed(2)}`);
+        logEntry.orderId = order.id;
         logEntry.orderPlaced = true;
-        logEntry.orderId = order.orderId;
-        console.log(`✅ ORDER PLACED — ${order.orderId}`);
-      } catch (err) {
-        console.log(`❌ ORDER FAILED — ${err.message}`);
-        logEntry.error = err.message;
+        logEntry.tpsl = tpsl;
+
+        // Add to position manager (live trading)
+        const position = addPosition({
+          symbol,
+          side: positionSide,
+          entryPrice: ictAnalysis.priceLTF,
+          quantity: order.size || (tradeSize * CONFIG.leverage) / ictAnalysis.priceLTF,
+          leverage: CONFIG.leverage,
+          stopLoss: tpsl.stopLoss,
+          takeProfit: tpsl.takeProfit,
+          riskRewardRatio: tpsl.riskRewardRatio,
+          orderId: order.id,
+          paperTrading: false,
+          ictAnalysis: {
+            htfTrend: ictAnalysis.htfTrend,
+            inOTE: ictAnalysis.inOTE,
+            orderBlocks: ictAnalysis.orderBlocks.length,
+            fvgs: ictAnalysis.fvgs.length,
+            killZone: ictAnalysis.killZone.session,
+            confirmation: ictAnalysis.confirmation.pattern,
+            bos: ictAnalysis.bos,
+          },
+        });
+
+        logEntry.positionId = position.id;
+
+        // Draw visual markers on TradingView chart
+        try {
+          await drawVisualAnalysis(ictAnalysis, position, tpsl);
+        } catch (e) {
+          console.log(`⚠️  Could not draw visual analysis: ${e.message}`);
+        }
+
+      } catch (e) {
+        console.log(`🚫 TRADE BLOCKED: ${e.message}`);
+        logEntry.error = e.message;
       }
     }
+  } else {
+    console.log("\n🚫 TRADE BLOCKED — Not all ICT conditions met\n");
   }
 
-  // Save decision log
+  writeTradeCsv(logEntry);
   log.trades.push(logEntry);
   saveLog(log);
-  console.log(`\nDecision log saved → ${LOG_FILE}`);
 
-  // Write tax CSV row for every run (executed, paper, or blocked)
-  writeTradeCsv(logEntry);
-
-  console.log("═══════════════════════════════════════════════════════════\n");
+  // Draw visual analysis on TradingView chart if available
+  if (allPass || ictAnalysis.inOTE) {
+    try {
+      await drawVisualAnalysis(ictAnalysis, allPass);
+    } catch (e) {
+      console.log(`⚠️  Could not draw visual analysis: ${e.message}`);
+    }
+  }
 }
 
-if (process.argv.includes("--tax-summary")) {
+// ─── Entry Point ────────────────────────────────────────────────────────────
+
+// Run the bot immediately when executed
+const args = process.argv.slice(2);
+if (args[0] === "--tax-summary") {
   generateTaxSummary();
 } else {
-  run().catch((err) => {
-    console.error("Bot error:", err);
+  console.log("\n🚀 Starting Automated Trading Bot...\n");
+  run().catch((error) => {
+    console.error("\n❌ Bot Error:", error.message);
+    console.error(error.stack);
     process.exit(1);
   });
 }
+
+export {
+  run,
+  fetchMarketData,
+  calcEMA,
+  calcRSI,
+  calcVWAP,
+  runICTSafetyCheck,
+  performICTAnalysis,
+  findSwingPoints,
+  calcFibonacciLevels,
+  isInOTEZone,
+  detectOrderBlocks,
+  detectFairValueGaps,
+  isInKillZone,
+  detectConfirmationPattern,
+  detectBreakOfStructure
+};

@@ -370,10 +370,37 @@ footer {
     <div class="stat"><div class="label">Est. Fees</div><div class="val tabular" id="s-fees">$0</div><div class="sub">cumulative</div></div>
   </div>
 
+  <!-- NEW STATS STRIP - POSITION PERFORMANCE -->
+  <div class="stats">
+    <div class="stat"><div class="label">Open Positions</div><div class="val tabular" id="s-open-pos">0</div><div class="sub">active trades</div></div>
+    <div class="stat"><div class="label">Total P&L</div><div class="val tabular" id="s-total-pnl">$0.00</div><div class="sub">realized profit/loss</div></div>
+    <div class="stat"><div class="label">Win Rate</div><div class="val tabular" id="s-win-rate">0%</div><div class="sub">closed positions</div></div>
+    <div class="stat"><div class="label">Avg Leverage</div><div class="val amber tabular" id="s-avg-leverage">0x</div><div class="sub">position sizing</div></div>
+    <div class="stat"><div class="label">Avg R:R</div><div class="val tabular" id="s-avg-rr">0:0</div><div class="sub">risk:reward ratio</div></div>
+    <div class="stat"><div class="label">Monitor Status</div><div class="val tabular" id="s-monitor">IDLE</div><div class="sub">position tracking</div></div>
+  </div>
+
   <!-- MAIN GRID -->
-  <main>
+  <main style="grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr;">
+    <!-- OPEN POSITIONS -->
+    <section class="panel" style="grid-column: 1; grid-row: 1;">
+      <div class="panel-head">
+        <span><span class="h">▸ OPEN POSITIONS</span></span>
+        <span class="pill" id="open-pos-count">0 active</span>
+      </div>
+      <div class="panel-body" id="open-pos-body">
+        <div class="empty">
+          <div>NO OPEN POSITIONS</div>
+          <pre class="ascii">  ░░░░░░░░░░░░░░░
+  AWAITING ENTRY
+  ░░░░░░░░░░░░░░░</pre>
+          <div>Positions will appear here when trades are executed.</div>
+        </div>
+      </div>
+    </section>
+
     <!-- EXECUTED -->
-    <section class="panel" style="grid-column: 1; grid-row: 1 / span 2;">
+    <section class="panel" style="grid-column: 2; grid-row: 1 / span 2;">
       <div class="panel-head">
         <span><span class="h">▸ EXECUTED TRADES</span></span>
         <span class="pill" id="exec-count">0 records</span>
@@ -390,7 +417,7 @@ footer {
     </section>
 
     <!-- DECISION FEED -->
-    <section class="panel" style="grid-column: 2; grid-row: 1;">
+    <section class="panel" style="grid-column: 3; grid-row: 1;">
       <div class="panel-head">
         <span><span class="h">▸ DECISION FEED</span></span>
         <span class="chips">
@@ -404,8 +431,19 @@ footer {
       </div>
     </section>
 
+    <!-- ICT ANALYSIS -->
+    <section class="panel" style="grid-column: 1; grid-row: 2;">
+      <div class="panel-head">
+        <span><span class="h">▸ ICT ANALYSIS</span></span>
+        <span class="pill" id="ict-status">—</span>
+      </div>
+      <div class="panel-body" id="ict-body">
+        <div class="empty">NO ANALYSIS DATA YET</div>
+      </div>
+    </section>
+
     <!-- DETAIL -->
-    <section class="panel" style="grid-column: 2; grid-row: 2;">
+    <section class="panel" style="grid-column: 3; grid-row: 2;">
       <div class="panel-head">
         <span><span class="h">▸ DECISION DETAIL</span></span>
         <span class="pill" id="detail-ts">—</span>
@@ -468,6 +506,7 @@ const state = {
   env: {},
   rules: {},
   csv: '',
+  positions: { positions: [] },
   filter: 'all',
   selectedIdx: null,
 };
@@ -482,16 +521,18 @@ const fmtTime = (iso) => {
 
 async function fetchAll() {
   try {
-    const [logRes, envRes, csvRes, rulesRes] = await Promise.all([
+    const [logRes, envRes, csvRes, rulesRes, positionsRes] = await Promise.all([
       fetch('/api/log').then(r => r.json()),
       fetch('/api/env').then(r => r.json()),
       fetch('/api/csv').then(r => r.text()),
       fetch('/api/rules').then(r => r.json()),
+      fetch('/api/positions').then(r => r.json()).catch(() => ({ positions: [] })),
     ]);
     state.log = logRes && logRes.trades ? logRes : { trades: [] };
     state.env = envRes;
     state.csv = csvRes;
     state.rules = rulesRes;
+    state.positions = positionsRes && positionsRes.positions ? positionsRes : { positions: [] };
     render();
     document.getElementById('status-line').textContent = '▸ CONNECTED — ' + state.log.trades.length + ' decisions on file';
     document.getElementById('last-refresh').textContent = 'last sync: ' + new Date().toISOString().slice(11, 19) + 'Z';
@@ -534,9 +575,107 @@ function render() {
   document.getElementById('s-volume').textContent = fmtUSD(volume);
   document.getElementById('s-fees').textContent = fmtUSD(fees);
 
+  // New position performance stats
+  const positions = state.positions.positions || [];
+  const openPositions = positions.filter(p => p.status === 'open');
+  const closedPositions = positions.filter(p => p.status !== 'open');
+  const totalPnL = closedPositions.reduce((sum, p) => sum + (p.realizedPnL || 0), 0);
+  const winners = closedPositions.filter(p => (p.realizedPnL || 0) > 0).length;
+  const losers = closedPositions.filter(p => (p.realizedPnL || 0) < 0).length;
+  const winRate = closedPositions.length > 0 ? ((winners / closedPositions.length) * 100).toFixed(1) : '0.0';
+  const avgLeverage = positions.length > 0 ? (positions.reduce((sum, p) => sum + (p.leverage || 0), 0) / positions.length).toFixed(1) : '0';
+  const avgRR = positions.length > 0 ? (positions.reduce((sum, p) => sum + (p.riskRewardRatio || 0), 0) / positions.length).toFixed(1) : '0';
+  const monitorStatus = openPositions.length > 0 ? 'ACTIVE' : 'IDLE';
+
+  document.getElementById('s-open-pos').textContent = openPositions.length;
+  const pnlEl = document.getElementById('s-total-pnl');
+  pnlEl.textContent = fmtUSD(totalPnL);
+  pnlEl.classList.toggle('red', totalPnL < 0);
+  pnlEl.classList.toggle('amber', totalPnL === 0);
+  document.getElementById('s-win-rate').textContent = winRate + '%';
+  document.getElementById('s-avg-leverage').textContent = avgLeverage + 'x';
+  document.getElementById('s-avg-rr').textContent = '1:' + avgRR;
+  const monitorEl = document.getElementById('s-monitor');
+  monitorEl.textContent = monitorStatus;
+  monitorEl.classList.toggle('amber', monitorStatus === 'ACTIVE');
+
+  renderOpenPositions();
   renderExecuted();
   renderFeed();
+  renderICTAnalysis();
   renderDetail();
+}
+
+function renderOpenPositions() {
+  const body = document.getElementById('open-pos-body');
+  const openPositions = (state.positions.positions || []).filter(p => p.status === 'open');
+
+  document.getElementById('open-pos-count').textContent = openPositions.length + ' active';
+
+  if (openPositions.length === 0) {
+    body.innerHTML = `<div class="empty"><div>NO OPEN POSITIONS</div>
+      <pre class="ascii">  ░░░░░░░░░░░░░░░
+  AWAITING ENTRY
+  ░░░░░░░░░░░░░░░</pre>
+      <div>Positions will appear here when trades are executed.</div></div>`;
+    return;
+  }
+
+  const rows = openPositions.map(p => {
+    const pnlColor = (p.unrealizedPnL || 0) >= 0 ? 'tag-pass' : 'tag-block';
+    const pnlSign = (p.unrealizedPnL || 0) >= 0 ? '+' : '';
+    return `<tr data-pos-id="${p.id}">
+      <td class="${p.side === 'long' ? 'side-buy' : 'side-sell'}">${p.side.toUpperCase()}</td>
+      <td>${p.symbol || '—'}</td>
+      <td class="tabular">${fmtUSD(p.entryPrice)}</td>
+      <td class="tabular">${p.leverage}x</td>
+      <td class="${pnlColor} tabular">${pnlSign}${fmtUSD(p.unrealizedPnL || 0)}</td>
+      <td class="${pnlColor} tabular">${pnlSign}${fmtNum(p.unrealizedPnLPercent || 0, 2)}%</td>
+      <td class="dim tabular" style="font-size:10px">TP: ${fmtUSD(p.takeProfit)}</td>
+      <td class="dim tabular" style="font-size:10px">SL: ${fmtUSD(p.stopLoss)}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `<table>
+    <thead><tr>
+      <th>Side</th><th>Symbol</th><th>Entry</th><th>Lev</th><th>P&L</th><th>P&L %</th><th>TP</th><th>SL</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function renderICTAnalysis() {
+  const body = document.getElementById('ict-body');
+  const statusEl = document.getElementById('ict-status');
+
+  const last = state.log.trades[state.log.trades.length - 1];
+
+  if (!last || !last.ictAnalysis) {
+    statusEl.textContent = '—';
+    body.innerHTML = '<div class="empty">NO ANALYSIS DATA YET</div>';
+    return;
+  }
+
+  const ict = last.ictAnalysis;
+  statusEl.textContent = ict.htfTrend || '—';
+
+  const trendColor = ict.htfTrend === 'BULLISH' ? 'tag-pass' : ict.htfTrend === 'BEARISH' ? 'tag-block' : 'dim';
+
+  body.innerHTML = `
+    <div style="padding: 14px; font-size: 12px;">
+      <div class="kv" style="grid-template-columns: 1fr auto; gap: 8px 14px;">
+        <span class="k">HTF Trend</span><span class="v ${trendColor}">${ict.htfTrend || '—'}</span>
+        <span class="k">In OTE Zone</span><span class="v">${ict.inOTE ? 'YES' : 'NO'}</span>
+        <span class="k">Order Blocks</span><span class="v">${ict.orderBlocks || 0}</span>
+        <span class="k">Fair Value Gaps</span><span class="v">${ict.fvgs || 0}</span>
+        <span class="k">Kill Zone</span><span class="v">${ict.killZone || 'None'}</span>
+        <span class="k">Confirmation</span><span class="v">${ict.confirmation || 'None'}</span>
+        <span class="k">Break of Structure</span><span class="v">${ict.bos ? 'YES' : 'NO'}</span>
+      </div>
+      <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--green-faint); font-size: 10px; color: var(--green-dim);">
+        Last updated: ${fmtTime(last.timestamp)}
+      </div>
+    </div>`;
 }
 
 function renderExecuted() {

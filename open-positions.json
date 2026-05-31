@@ -1,0 +1,35 @@
+{
+  "positions": [
+    {
+      "id": "pos_1780211468651_8ccfoe4xi",
+      "symbol": "RIVERUSD",
+      "side": "long",
+      "entryPrice": 6.933,
+      "quantity": 7.211885186787827,
+      "leverage": 5,
+      "stopLoss": 6.7565335,
+      "takeProfit": 7.285933,
+      "riskRewardRatio": 2,
+      "entryTime": "2026-05-31T07:11:08.651Z",
+      "status": "open",
+      "orderId": null,
+      "paperTrading": true,
+      "ictAnalysis": {
+        "htfTrend": "BULLISH",
+        "inOTE": false,
+        "orderBlocks": 3,
+        "fvgs": 3,
+        "killZone": "London",
+        "confirmation": "None",
+        "bos": false
+      },
+      "unrealizedPnL": 0.3245348334054645,
+      "unrealizedPnLPercent": 0.649069666810929,
+      "realizedPnL": null,
+      "realizedPnLPercent": null,
+      "exitPrice": null,
+      "exitTime": null,
+      "exitReason": null
+    }
+  ]
+}
