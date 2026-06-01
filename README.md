@@ -580,9 +580,6 @@ console.log('Trend:', analysis.htfTrend);
 - **Bot is autonomous** - Runs without Claude/AI assistance
 - **TradingView optional** - Only for visualization, not required
 
-## 📄 License
-
-MIT License - See LICENSE file for details
 
 ## 🤝 Contributing
 
